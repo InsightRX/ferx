@@ -1,0 +1,24 @@
+TARGET_DIR = ./rust/target
+LIBDIR = $(TARGET_DIR)/release
+STATLIB = $(LIBDIR)/libferx.a
+PKG_LIBS = -L$(LIBDIR) -lferx -lm -ldl -lpthread
+
+all: C_clean
+
+$(SHLIB): $(STATLIB)
+
+$(STATLIB):
+	@# Ensure .cargo/config.toml exists (R CMD INSTALL strips hidden dirs)
+	@mkdir -p rust/.cargo
+	@echo '[build]' > rust/.cargo/config.toml
+	@echo 'rustflags = ["-Z", "autodiff=Enable"]' >> rust/.cargo/config.toml
+	@# Ensure rust-toolchain.toml exists
+	@echo '[toolchain]' > rust/rust-toolchain.toml
+	@echo 'channel = "enzyme"' >> rust/rust-toolchain.toml
+	cd rust && cargo build --release
+
+C_clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS)
+
+clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) rust/target

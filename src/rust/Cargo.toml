@@ -1,0 +1,14 @@
+[package]
+name = "ferx"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+extendr-api = "0.7"
+ferx-nlme = { path = "/Users/ronkeizer/git/insightrx/ferx-nlme", features = ["autodiff"] }
+
+[profile.release]
+lto = "fat"

@@ -1,0 +1,13 @@
+Package: ferx
+Title: Nonlinear Mixed Effects Modeling with Rust Backend
+Version: 0.1.0
+Authors@R: person("InsightRx", role = c("aut", "cre"), email = "dev@insightrx.com")
+Description: Fast NLME estimation using FOCE/FOCEI with automatic differentiation.
+    Powered by a Rust engine with Enzyme autodiff for exact gradients.
+    Supports analytical PK models (1/2-compartment) and ODE-based models.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+SystemRequirements: Rust (>= 1.70), Cargo; optionally Enzyme toolchain for autodiff
+Config/rextendr/version: 0.3.1
