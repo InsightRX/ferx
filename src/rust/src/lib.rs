@@ -45,7 +45,7 @@ fn ferx_rust_fit(
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
 
-    // Build initial parameters
+    // Build initial parameters (initial values now live in [parameters] block)
     let init_params = parsed.model.default_params.clone();
 
     // Fit
