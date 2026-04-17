@@ -138,6 +138,7 @@ version = "0.1.0"
 dependencies = [
  "extendr-api",
  "ferx-nlme",
+ "nalgebra",
 ]
 
 [[package]]

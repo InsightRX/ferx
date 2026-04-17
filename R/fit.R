@@ -9,6 +9,11 @@
 #' @param maxiter Maximum number of outer optimization iterations
 #' @param covariance Logical; compute the covariance step for standard errors
 #' @param verbose Logical; print progress during estimation
+#' @param bloq_method Handling of observations below the lower limit of
+#'   quantification. \code{NULL} (default) keeps whatever the model file
+#'   specified; \code{"m3"} enables Beal's M3 likelihood (requires a
+#'   \code{CENS} column in the data, with \code{DV} carrying the LLOQ value
+#'   on \code{CENS=1} rows); \code{"drop"} disables M3.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -30,6 +35,10 @@
 #' result <- ferx_fit("warfarin.ferx", "warfarin.csv")
 #' result$theta
 #' head(result$sdtab)
+#'
+#' # Likelihood-based BLOQ handling (M3):
+#' bloq <- ferx_example("warfarin_bloq")
+#' result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
 #' }
 #'
 #' @export
@@ -37,9 +46,15 @@ ferx_fit <- function(model, data,
                      method = "foce",
                      maxiter = 500L,
                      covariance = TRUE,
-                     verbose = TRUE) {
+                     verbose = TRUE,
+                     bloq_method = NULL) {
   stopifnot(file.exists(model), file.exists(data))
   method <- match.arg(tolower(method), c("foce", "focei"))
+  if (is.null(bloq_method)) {
+    bloq_arg <- ""
+  } else {
+    bloq_arg <- match.arg(tolower(bloq_method), c("drop", "m3"))
+  }
 
   raw <- ferx_rust_fit(
     model_path = normalizePath(model),
@@ -47,7 +62,8 @@ ferx_fit <- function(model, data,
     method = method,
     maxiter = as.integer(maxiter),
     covariance = covariance,
-    verbose = verbose
+    verbose = verbose,
+    bloq_method = bloq_arg
   )
 
   if (length(raw) == 0) {

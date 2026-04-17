@@ -8,8 +8,8 @@
 NULL
 
 #' @export
-ferx_rust_fit <- function(model_path, data_path, method, maxiter, covariance, verbose) {
-  .Call("wrap__ferx_rust_fit", model_path, data_path, method, maxiter, covariance, verbose)
+ferx_rust_fit <- function(model_path, data_path, method, maxiter, covariance, verbose, bloq_method) {
+  .Call("wrap__ferx_rust_fit", model_path, data_path, method, maxiter, covariance, verbose, bloq_method)
 }
 
 #' @export
@@ -18,8 +18,18 @@ ferx_rust_simulate <- function(model_path, data_path, n_sim, seed) {
 }
 
 #' @export
+ferx_rust_simulate_from_fit <- function(model_path, data_path, theta, omega_flat, omega_dim, sigma, n_sim, seed) {
+  .Call("wrap__ferx_rust_simulate_from_fit", model_path, data_path, theta, omega_flat, omega_dim, sigma, n_sim, seed)
+}
+
+#' @export
 ferx_rust_predict <- function(model_path, data_path) {
   .Call("wrap__ferx_rust_predict", model_path, data_path)
+}
+
+#' @export
+ferx_rust_predict_from_fit <- function(model_path, data_path, theta, omega_flat, omega_dim, sigma) {
+  .Call("wrap__ferx_rust_predict_from_fit", model_path, data_path, theta, omega_flat, omega_dim, sigma)
 }
 
 # nolint end
