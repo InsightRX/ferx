@@ -128,4 +128,6 @@ See `ferx_example()` for available bundled examples.
 
 ## License
 
-MIT
+MIT — see [LICENSE.md](LICENSE.md).
+
+Copyright © 2026 InsightRX, Inc.
