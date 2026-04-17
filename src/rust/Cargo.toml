@@ -8,7 +8,7 @@ crate-type = ["staticlib"]
 
 [dependencies]
 extendr-api = "0.7"
-ferx-nlme = { path = "/Users/ronkeizer/git/insightrx/ferx-nlme", features = ["autodiff"] }
+ferx-nlme = { path = "../../../ferx-nlme", features = ["autodiff"] }
 
 [profile.release]
 lto = "fat"

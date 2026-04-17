@@ -15,7 +15,7 @@ $(STATLIB):
 	@# Ensure rust-toolchain.toml exists
 	@echo '[toolchain]' > rust/rust-toolchain.toml
 	@echo 'channel = "enzyme"' >> rust/rust-toolchain.toml
-	cd rust && cargo build --release
+	cd rust && RUSTFLAGS="-Z autodiff=Enable" cargo build --release
 
 C_clean:
 	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS)

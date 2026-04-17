@@ -46,23 +46,7 @@ fn ferx_rust_fit(
     opts.verbose = verbose;
 
     // Build initial parameters
-    let mut init_params = parsed.model.default_params.clone();
-    if let Some(ref th) = parsed.init_theta {
-        if th.len() == init_params.theta.len() {
-            init_params.theta = th.clone();
-        }
-    }
-    if let Some(ref om) = parsed.init_omega {
-        let eta_names = init_params.omega.eta_names.clone();
-        init_params.omega = OmegaMatrix::from_diagonal(om, eta_names);
-    }
-    if let Some(ref sg) = parsed.init_sigma {
-        for (i, &v) in sg.iter().enumerate() {
-            if i < init_params.sigma.values.len() {
-                init_params.sigma.values[i] = v;
-            }
-        }
-    }
+    let init_params = parsed.model.default_params.clone();
 
     // Fit
     let result = match ferx_nlme::fit(&parsed.model, &population, &init_params, &opts) {
