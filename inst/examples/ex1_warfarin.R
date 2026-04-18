@@ -2,6 +2,8 @@
 library(ferx)
 library(vpc)
 library(dplyr)
+library(ggplot2)
+load_all()
 
 ex <- ferx_example("warfarin")
 
@@ -9,11 +11,43 @@ ex <- ferx_example("warfarin")
 result <- ferx_fit(
   model = ex$model, 
   data = ex$data, 
-  method = "focei"
+  method = "gn", ## Gauss-Newton
+  covariance = FALSE
 )
 
+result_foce <- ferx_fit(
+  model = ex$model, 
+  data = ex$data, 
+  method = "gn" ## Gauss-Newton
+)
+
+result_saem <- ferx_fit(
+  model = ex$model, 
+  data = ex$data, 
+  method = "saem"
+)
+
+## Basic GOF
+result$sdtab |>
+  tidyr::pivot_longer(cols = c("PRED", "IPRED")) |>
+  ggplot(aes(x = value, y = DV)) +
+    geom_point() +
+    facet_wrap(~name)
+result$sdtab |>
+  tidyr::pivot_longer(cols = c("CWRES", "DV")) |>
+  ggplot(aes(x = PRED, y = value)) +
+    geom_point() +
+    facet_wrap(~name, scales = "free") +
+    ylab("")
+
 # Simulate and create VPC
-sim <- ferx_simulate(ex$model, ex$data, n_sim = 100, seed = 42)
+sim <- ferx_simulate(
+  ex$model, 
+  ex$data, 
+  n_sim = 200, 
+  seed = 42,
+  fit = result
+)
 obs <- read.csv(file = ex$data)
 vpc(
   obs = obs |> 

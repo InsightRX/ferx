@@ -29,7 +29,7 @@ data |>
 sim <- ferx_simulate(
   ex$model,
   ex$data,
-  n_sim = 100,
+  n_sim = 200,
   seed = 42,
   fit = result
 )
@@ -38,6 +38,14 @@ vpc(
   obs = obs |>
     mutate(DV = as.numeric(DV)),
   sim = sim,
-  obs_cols = list(),
   sim_cols = list(dv = "DV_SIM")
+)
+
+## VPC for BLOQ censoring
+vpc_cens(
+  obs = obs |>
+    mutate(DV = as.numeric(DV)),
+  sim = sim,
+  sim_cols = list(dv = "DV_SIM"),
+  lloq = 2
 )
