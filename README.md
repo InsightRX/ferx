@@ -13,57 +13,15 @@ Fast nonlinear mixed effects (NLME) modeling in R, powered by a Rust backend wit
 
 ## Installation
 
-ferx depends on the experimental Rust autodiff feature, which requires a nightly rustc plus the Enzyme LLVM plugin. As of 2026, Enzyme is not yet shipped by rustup, so a one-time plugin build is needed.
+A Rust installation with the Enzyme AutoDifferentiation engine is required for FeRx to compute gradients. Most likely
+you will need to build Rust from source, which may take an hour or so.
 
-### Prerequisites
-
-1. **rustup + upstream nightly**
-   ```bash
-   # If you had snap's rustup, remove it first: sudo snap remove rustup
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-   source "$HOME/.cargo/env"
-   rustup toolchain install nightly
-   ```
-
-2. **The `enzyme` toolchain must be registered.** The ferx build system pins to a toolchain named `enzyme`. Either:
-
-   **Option A — simple (single user, dev machine):** use your nightly as the enzyme toolchain
-   ```bash
-   rustup toolchain link enzyme "$(rustup which --toolchain nightly rustc | xargs dirname | xargs dirname)"
-   ```
-
-   **Option B — shared (multi-user server):** a sysadmin stages nightly + the Enzyme plugin in `/opt/rust-nightly`, each user links that:
-   ```bash
-   rustup toolchain link enzyme /opt/rust-nightly
-   ```
-   See [INSTALL-SYSADMIN.md](INSTALL-SYSADMIN.md) for the sysadmin side: installing matching LLVM, building the Enzyme plugin, and dropping `libEnzyme-<N>.so` in the right sysroot location.
-
-3. **R environment** — tell R to find rustup and pick the enzyme toolchain. Add to `~/.Renviron`:
-   ```
-   PATH=/opt/rust-nightly/bin:${HOME}/.cargo/bin:${PATH}
-   RUSTUP_TOOLCHAIN=enzyme
-   ```
-   (Drop the `/opt/rust-nightly/bin` entry if you're using Option A above.) Restart R.
-
-### Docker
-
-A Docker image is available that bundles the Enzyme toolchain (built from source), ferx CLI, the ferx R package, and RStudio Server — no local Rust/Enzyme setup required.
-
-```bash
-# Build (first build takes ~45-60 min; cached after that)
-docker build -t ferx:latest .
-
-# Run RStudio Server
-docker run --rm -p 8787:8787 -e PASSWORD=ferx ferx:latest
-# -> http://localhost:8787   user: rstudio   password: ferx
-
-# Run the ferx CLI directly
-docker run --rm -v "$PWD:/work" -w /work ferx:latest ferx model.ferx --data data.csv
-```
+See [documentation](https://insightrx.github.io/ferx-nlme/installation.html) for installation instructions. 
 
 ### Install the package
 
-From R:
+After installing Rust, in R run:
+
 ```r
 devtools::install_github("InsightRX/ferx")
 ```
@@ -73,17 +31,18 @@ Or from a local clone:
 R CMD INSTALL .
 ```
 
-### Verifying the Enzyme plugin is available
+### Docker
 
-Before installing, this should print `LLVM version: <N>.x.y` and **not** error:
+A Docker image is available that bundles the Enzyme toolchain (built from source), ferx CLI, the ferx R package, and RStudio Server — no local Rust/Enzyme setup required. If you're on Windows, this is currently the only supported way of running FeRx.
+
 ```bash
-rustc +enzyme -Z autodiff=Enable - </dev/null 2>&1 | head
-# Expected output: "error[E0601]: `main` function not found"
-# That error is fine — it means rustc + Enzyme loaded successfully.
-# The real problem is if it says "autodiff backend not found in the sysroot".
-```
+# Build (first build takes ~45-60 min; cached after that)
+docker build -t ferx:latest .
 
-If you see "autodiff backend not found", the `libEnzyme-<N>.so` file is missing or in the wrong place. See the sysadmin install guide for how to build and place it.
+# Run RStudio Server
+docker run --rm -p 8787:8787 -e PASSWORD=ferx ferx:latest
+# -> http://localhost:8787   user: rstudio   password: ferx
+```
 
 ## Quick Start
 
