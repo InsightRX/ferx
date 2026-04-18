@@ -19,7 +19,9 @@ ferx_fit(
 
 \item{data}{Path to a NONMEM-format CSV file (ID, TIME, DV, EVID, AMT, CMT, ...)}
 
-\item{method}{Estimation method: "foce" or "focei"}
+\item{method}{Estimation method. One of \code{"foce"}, \code{"focei"},
+\code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or \code{"gn_hybrid"}
+(Gauss-Newton followed by a FOCEI polish step).}
 
 \item{maxiter}{Maximum number of outer optimization iterations}
 

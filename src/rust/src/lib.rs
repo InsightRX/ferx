@@ -43,8 +43,23 @@ fn ferx_rust_fit(
 
     // Build fit options
     let mut opts = parsed.fit_options.clone();
-    opts.interaction = method.to_lowercase().contains("focei")
-        || method.to_lowercase().contains("interaction");
+    let m = method.to_lowercase();
+    if m.contains("saem") {
+        opts.method = EstimationMethod::Saem;
+        opts.interaction = false;
+    } else if m.contains("hybrid") {
+        opts.method = EstimationMethod::FoceGnHybrid;
+        opts.interaction = false;
+    } else if m.contains("gn") || m.contains("gauss") {
+        opts.method = EstimationMethod::FoceGn;
+        opts.interaction = false;
+    } else if m.contains("focei") || m.contains("foce-i") || m.contains("interaction") {
+        opts.method = EstimationMethod::FoceI;
+        opts.interaction = true;
+    } else {
+        opts.method = EstimationMethod::Foce;
+        opts.interaction = false;
+    }
     opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
@@ -375,9 +390,17 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
     // Warnings
     let warnings: Vec<String> = result.warnings.clone();
 
+    let method_label = match result.method {
+        EstimationMethod::Saem => "SAEM",
+        EstimationMethod::FoceI => "FOCEI",
+        EstimationMethod::Foce => "FOCE",
+        EstimationMethod::FoceGn => "FOCE-GN",
+        EstimationMethod::FoceGnHybrid => "FOCE-GN-Hybrid",
+    };
+
     list!(
         converged = result.converged,
-        method = if result.interaction { "FOCEI" } else { "FOCE" },
+        method = method_label,
         ofv = result.ofv,
         aic = result.aic,
         bic = result.bic,

@@ -5,7 +5,9 @@
 #'
 #' @param model Path to a .ferx model file
 #' @param data Path to a NONMEM-format CSV file (ID, TIME, DV, EVID, AMT, CMT, ...)
-#' @param method Estimation method: "foce" or "focei"
+#' @param method Estimation method. One of \code{"foce"}, \code{"focei"},
+#'   \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or \code{"gn_hybrid"}
+#'   (Gauss-Newton followed by a FOCEI polish step).
 #' @param maxiter Maximum number of outer optimization iterations
 #' @param covariance Logical; compute the covariance step for standard errors
 #' @param verbose Logical; print progress during estimation
@@ -49,7 +51,10 @@ ferx_fit <- function(model, data,
                      verbose = TRUE,
                      bloq_method = NULL) {
   stopifnot(file.exists(model), file.exists(data))
-  method <- match.arg(tolower(method), c("foce", "focei"))
+  method <- match.arg(
+    tolower(gsub("[^a-z0-9]", "_", method)),
+    c("foce", "focei", "saem", "gn", "gn_hybrid")
+  )
   if (is.null(bloq_method)) {
     bloq_arg <- ""
   } else {
