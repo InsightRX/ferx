@@ -8,6 +8,7 @@ Fast nonlinear mixed effects (NLME) modeling in R, powered by a Rust backend wit
 - **Analytical PK models**: 1- and 2-compartment (oral/IV)
 - **ODE-based models**: Dormand-Prince RK45 solver for general ODEs
 - **NONMEM-compatible**: reads standard NONMEM CSV datasets
+- **BLOQ handling**: Beal's M3 likelihood for observations below the LLOQ
 - **Model DSL**: define models in `.ferx` text files
 
 ## Installation
@@ -80,12 +81,33 @@ ex <- ferx_example("warfarin")
 result <- ferx_fit(ex$model, ex$data, method = "focei")
 result
 
-# Simulate for VPC
-sim <- ferx_simulate(ex$model, ex$data, n_sim = 100, seed = 42)
+# Simulate at the fitted estimates (typical VPC flow)
+sim <- ferx_simulate(ex$model, ex$data, n_sim = 100, seed = 42, fit = result)
 
-# Population predictions
-preds <- ferx_predict(ex$model, ex$data)
+# Population predictions at the fitted estimates
+preds <- ferx_predict(ex$model, ex$data, fit = result)
 ```
+
+Pass `fit = <ferx_fit result>` to `ferx_simulate()` / `ferx_predict()` to use
+the fitted theta / omega / sigma. Omit it to use the model file's initial
+values.
+
+## BLOQ handling (M3 method)
+
+For observations below the lower limit of quantification, flag them with a
+`CENS` column in the data (1 = censored, with `DV` carrying the LLOQ value)
+and pass `bloq_method = "m3"` to `ferx_fit()`. Each censored observation then
+contributes `P(y < LLOQ | θ, η) = Φ((LLOQ − f)/√V)` to the likelihood instead
+of a Gaussian residual, avoiding the terminal-phase bias that comes from
+simply dropping BLOQ rows.
+
+```r
+bloq <- ferx_example("warfarin_bloq")
+result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
+sim <- ferx_simulate(bloq$model, bloq$data, n_sim = 100, seed = 42, fit = result)
+```
+
+See `inst/examples/ex1a_warfarin_bloq.R` for a full fit + VPC walkthrough.
 
 ## Model Specification
 
@@ -121,9 +143,9 @@ See `ferx_example()` for available bundled examples.
 
 | Function | Description |
 |---|---|
-| `ferx_fit()` | Fit a NLME model (FOCE/FOCEI) |
-| `ferx_simulate()` | Simulate replicates with BSV and residual error |
-| `ferx_predict()` | Population predictions (ETA = 0) |
+| `ferx_fit()` | Fit a NLME model (FOCE/FOCEI). `bloq_method = "m3"` enables M3. |
+| `ferx_simulate()` | Simulate replicates with BSV and residual error. Pass `fit =` to use fitted estimates. |
+| `ferx_predict()` | Population predictions (ETA = 0). Pass `fit =` to use fitted theta. |
 | `ferx_example()` | Get paths to bundled example models and data |
 
 ## License

@@ -4,7 +4,7 @@
 \alias{ferx_simulate}
 \title{Simulate from a NLME model}
 \usage{
-ferx_simulate(model, data, n_sim = 1L, seed = 42L)
+ferx_simulate(model, data, n_sim = 1L, seed = 42L, fit = NULL)
 }
 \arguments{
 \item{model}{Path to a .ferx model file}
@@ -14,17 +14,29 @@ ferx_simulate(model, data, n_sim = 1L, seed = 42L)
 \item{n_sim}{Number of simulation replicates}
 
 \item{seed}{Random seed for reproducibility}
+
+\item{fit}{Optional \code{ferx_fit} result. When provided, simulation uses
+\code{fit$theta}, \code{fit$omega}, and \code{fit$sigma} instead of the
+model file's initial values.}
 }
 \value{
 A data.frame with columns: SIM, ID, TIME, IPRED, DV_SIM
 }
 \description{
 Simulates observations from a parsed model with between-subject variability
-and residual error.
+and residual error. When a \code{fit} is supplied, the fitted theta, omega,
+and sigma replace the model file's initial values — which is the usual flow
+after \code{\link{ferx_fit}} (e.g. for posterior-predictive checks or VPCs).
 }
 \examples{
 \dontrun{
-sim <- ferx_simulate("warfarin.ferx", "warfarin.csv", n_sim = 100, seed = 42)
+# Simulate at the model file's initial estimates:
+sim0 <- ferx_simulate("warfarin.ferx", "warfarin.csv", n_sim = 100, seed = 42)
+
+# Fit, then simulate at the fitted estimates (typical VPC flow):
+result <- ferx_fit("warfarin.ferx", "warfarin.csv")
+sim <- ferx_simulate("warfarin.ferx", "warfarin.csv",
+                     n_sim = 100, seed = 42, fit = result)
 }
 
 }

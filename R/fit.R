@@ -5,10 +5,17 @@
 #'
 #' @param model Path to a .ferx model file
 #' @param data Path to a NONMEM-format CSV file (ID, TIME, DV, EVID, AMT, CMT, ...)
-#' @param method Estimation method: "foce" or "focei"
+#' @param method Estimation method. One of \code{"foce"}, \code{"focei"},
+#'   \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or \code{"gn_hybrid"}
+#'   (Gauss-Newton followed by a FOCEI polish step).
 #' @param maxiter Maximum number of outer optimization iterations
 #' @param covariance Logical; compute the covariance step for standard errors
 #' @param verbose Logical; print progress during estimation
+#' @param bloq_method Handling of observations below the lower limit of
+#'   quantification. \code{NULL} (default) keeps whatever the model file
+#'   specified; \code{"m3"} enables Beal's M3 likelihood (requires a
+#'   \code{CENS} column in the data, with \code{DV} carrying the LLOQ value
+#'   on \code{CENS=1} rows); \code{"drop"} disables M3.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -30,6 +37,10 @@
 #' result <- ferx_fit("warfarin.ferx", "warfarin.csv")
 #' result$theta
 #' head(result$sdtab)
+#'
+#' # Likelihood-based BLOQ handling (M3):
+#' bloq <- ferx_example("warfarin_bloq")
+#' result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
 #' }
 #'
 #' @export
@@ -37,9 +48,18 @@ ferx_fit <- function(model, data,
                      method = "foce",
                      maxiter = 500L,
                      covariance = TRUE,
-                     verbose = TRUE) {
+                     verbose = TRUE,
+                     bloq_method = NULL) {
   stopifnot(file.exists(model), file.exists(data))
-  method <- match.arg(tolower(method), c("foce", "focei"))
+  method <- match.arg(
+    tolower(gsub("[^a-z0-9]", "_", method)),
+    c("foce", "focei", "saem", "gn", "gn_hybrid")
+  )
+  if (is.null(bloq_method)) {
+    bloq_arg <- ""
+  } else {
+    bloq_arg <- match.arg(tolower(bloq_method), c("drop", "m3"))
+  }
 
   raw <- ferx_rust_fit(
     model_path = normalizePath(model),
@@ -47,7 +67,8 @@ ferx_fit <- function(model, data,
     method = method,
     maxiter = as.integer(maxiter),
     covariance = covariance,
-    verbose = verbose
+    verbose = verbose,
+    bloq_method = bloq_arg
   )
 
   if (length(raw) == 0) {

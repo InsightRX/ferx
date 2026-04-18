@@ -13,7 +13,13 @@ result <- ferx_fit(
 )
 
 # Simulate and create VPC
-sim <- ferx_simulate(ex$model, ex$data, n_sim = 100, seed = 42)
+sim <- ferx_simulate(
+  model = ex$model, 
+  data = ex$data, 
+  n_sim = 200, 
+  seed = 42,
+  fit = result
+)
 obs <- read.csv(file = ex$data)
 vpc(
   obs = obs |> 

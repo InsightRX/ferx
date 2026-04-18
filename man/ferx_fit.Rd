@@ -10,7 +10,8 @@ ferx_fit(
   method = "foce",
   maxiter = 500L,
   covariance = TRUE,
-  verbose = TRUE
+  verbose = TRUE,
+  bloq_method = NULL
 )
 }
 \arguments{
@@ -18,13 +19,21 @@ ferx_fit(
 
 \item{data}{Path to a NONMEM-format CSV file (ID, TIME, DV, EVID, AMT, CMT, ...)}
 
-\item{method}{Estimation method: "foce" or "focei"}
+\item{method}{Estimation method. One of \code{"foce"}, \code{"focei"},
+\code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or \code{"gn_hybrid"}
+(Gauss-Newton followed by a FOCEI polish step).}
 
 \item{maxiter}{Maximum number of outer optimization iterations}
 
 \item{covariance}{Logical; compute the covariance step for standard errors}
 
 \item{verbose}{Logical; print progress during estimation}
+
+\item{bloq_method}{Handling of observations below the lower limit of
+quantification. \code{NULL} (default) keeps whatever the model file
+specified; \code{"m3"} enables Beal's M3 likelihood (requires a
+\code{CENS} column in the data, with \code{DV} carrying the LLOQ value
+on \code{CENS=1} rows); \code{"drop"} disables M3.}
 }
 \value{
 A list with components:
@@ -51,6 +60,10 @@ powered by automatic differentiation (Enzyme).
 result <- ferx_fit("warfarin.ferx", "warfarin.csv")
 result$theta
 head(result$sdtab)
+
+# Likelihood-based BLOQ handling (M3):
+bloq <- ferx_example("warfarin_bloq")
+result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
 }
 
 }

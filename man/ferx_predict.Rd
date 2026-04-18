@@ -4,12 +4,15 @@
 \alias{ferx_predict}
 \title{Population predictions from a NLME model}
 \usage{
-ferx_predict(model, data)
+ferx_predict(model, data, fit = NULL)
 }
 \arguments{
 \item{model}{Path to a .ferx model file}
 
 \item{data}{Path to a NONMEM-format CSV}
+
+\item{fit}{Optional \code{ferx_fit} result. When provided, predictions use
+\code{fit$theta} instead of the model file's initial estimate for theta.}
 }
 \value{
 A data.frame with columns: ID, TIME, PRED
@@ -20,6 +23,9 @@ Computes population-level predictions (eta = 0) for all subjects.
 \examples{
 \dontrun{
 preds <- ferx_predict("warfarin.ferx", "warfarin.csv")
+
+result <- ferx_fit("warfarin.ferx", "warfarin.csv")
+preds_fitted <- ferx_predict("warfarin.ferx", "warfarin.csv", fit = result)
 }
 
 }
