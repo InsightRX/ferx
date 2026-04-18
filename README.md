@@ -45,6 +45,22 @@ ferx depends on the experimental Rust autodiff feature, which requires a nightly
    ```
    (Drop the `/opt/rust-nightly/bin` entry if you're using Option A above.) Restart R.
 
+### Docker
+
+A Docker image is available that bundles the Enzyme toolchain (built from source), ferx CLI, the ferx R package, and RStudio Server — no local Rust/Enzyme setup required.
+
+```bash
+# Build (first build takes ~45-60 min; cached after that)
+docker build -t ferx:latest .
+
+# Run RStudio Server
+docker run --rm -p 8787:8787 -e PASSWORD=ferx ferx:latest
+# -> http://localhost:8787   user: rstudio   password: ferx
+
+# Run the ferx CLI directly
+docker run --rm -v "$PWD:/work" -w /work ferx:latest ferx model.ferx --data data.csv
+```
+
 ### Install the package
 
 From R:
