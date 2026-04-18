@@ -1,0 +1,14 @@
+.git/
+.gitignore
+src/rust/target/
+src/ferx.so
+src/entrypoint.o
+*.Rproj
+.Rproj.user/
+.Rhistory
+.RData
+.Renviron
+inst/doc/
+docs/
+Dockerfile
+.dockerignore
