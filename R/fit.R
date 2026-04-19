@@ -29,7 +29,19 @@
 #'   so successive fits in the same R session can use different values.
 #' @param optimizer Outer optimizer used during estimation. One of
 #'   \code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
-#'   \code{"bobyqa"}, or \code{"trust_region"}.
+#'   \code{"bobyqa"}, or \code{"trust_region"}. \code{"slsqp"} and
+#'   \code{"lbfgs"} use gradient information from Enzyme autodiff and are
+#'   fastest on smooth surfaces. \code{"bobyqa"} is derivative-free and more
+#'   robust on discontinuous or noisy objectives. \code{"trust_region"} uses a
+#'   second-order trust-region method. \code{"mma"} is a gradient-based
+#'   method-of-moving-asymptotes approach.
+#' @param inner_maxiter Maximum number of inner (individual) optimization
+#'   iterations per outer step. Default is \code{200}. Reduce for speed at the
+#'   cost of inner convergence accuracy; increase if individual fits are not
+#'   converging.
+#' @param inner_tol Convergence tolerance for the inner (individual)
+#'   optimizer. Default is \code{1e-6}. Looser values (e.g. \code{1e-4})
+#'   speed up each outer iteration; tighter values improve accuracy.
 #' @param settings Optional named list of estimation-method-specific options
 #'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 #'   not have a dedicated \code{ferx_fit()} argument, without needing a new
@@ -65,9 +77,22 @@
 #'
 #' @examples
 #' \dontrun{
-#' result <- ferx_fit("warfarin.ferx", "warfarin.csv")
-#' result$theta
-#' head(result$sdtab)
+#' ex <- ferx_example("warfarin")
+#'
+#' # Default SLSQP optimizer
+#' fit <- ferx_fit(ex$model, ex$data)
+#'
+#' # Derivative-free BOBYQA — more robust on difficult surfaces
+#' fit_bobyqa <- ferx_fit(ex$model, ex$data, optimizer = "bobyqa")
+#'
+#' # Second-order trust region
+#' fit_tr <- ferx_fit(ex$model, ex$data, optimizer = "trust_region")
+#'
+#' # Fine-tune inner loop speed
+#' fit_fast <- ferx_fit(ex$model, ex$data,
+#'                      optimizer = "bobyqa",
+#'                      inner_maxiter = 100,
+#'                      inner_tol = 1e-6)
 #'
 #' # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
 #' result <- ferx_fit("warfarin.ferx", "warfarin.csv",
@@ -94,6 +119,8 @@ ferx_fit <- function(model, data,
                      bloq_method = NULL,
                      threads = NULL,
                      optimizer = "slsqp",
+                     inner_maxiter = 200L,
+                     inner_tol = 1e-6,
                      settings = NULL) {
   stopifnot(file.exists(model), file.exists(data))
   if (!is.character(method) || length(method) == 0L) {
@@ -141,6 +168,8 @@ ferx_fit <- function(model, data,
     bloq_method = bloq_arg,
     threads = threads_arg,
     optimizer = optimizer,
+    inner_maxiter = as.integer(inner_maxiter),
+    inner_tol = as.double(inner_tol),
     settings_keys = settings_parts$keys,
     settings_values = settings_parts$values
   )

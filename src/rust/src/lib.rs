@@ -60,6 +60,8 @@ const POLL_MS: u64 = 100;
 ///   (one worker per logical CPU). Positive values run this fit inside a
 ///   scoped local pool of that size.
 /// @param optimizer Outer optimizer: "slsqp", "lbfgs", "mma", "bobyqa", or "trust_region"
+/// @param inner_maxiter Maximum inner (individual) optimizer iterations
+/// @param inner_tol Convergence tolerance for the inner optimizer
 /// @param settings_keys Parallel vector of setting names (pre-stringified).
 ///   Used together with `settings_values` to pass generic estimation-method
 ///   options (e.g. `n_exploration`, `sir_samples`) without needing a new
@@ -82,6 +84,8 @@ fn ferx_rust_fit(
     bloq_method: &str,
     threads: i32,
     optimizer: &str,
+    inner_maxiter: i32,
+    inner_tol: f64,
     settings_keys: Vec<String>,
     settings_values: Vec<String>,
 ) -> List {
@@ -170,6 +174,9 @@ fn ferx_rust_fit(
     opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
+    // Inner optimizer settings
+    opts.inner_maxiter = inner_maxiter as usize;
+    opts.inner_tol = inner_tol;
     opts.threads = if threads > 0 {
         Some(threads as usize)
     } else {
@@ -191,6 +198,10 @@ fn ferx_rust_fit(
     }
     // Mirror onto the compiled model so likelihood functions pick it up.
     parsed.model.bloq_method = opts.bloq_method;
+
+    // Inner optimizer settings
+    opts.inner_maxiter = inner_maxiter as usize;
+    opts.inner_tol = inner_tol;
 
     // Outer optimizer override
     match optimizer.trim().to_lowercase().as_str() {
