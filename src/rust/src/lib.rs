@@ -15,6 +15,7 @@ use std::path::Path;
 /// @param optimizer Outer optimizer: "slsqp", "lbfgs", "mma", "bobyqa", or "trust_region"
 /// @param inner_maxiter Maximum inner (individual) optimizer iterations
 /// @param inner_tol Convergence tolerance for the inner optimizer
+/// @param mu_referencing Use mu-referencing for ETA initialisation (TRUE/FALSE)
 /// @return Named list with fit results
 /// @export
 #[extendr]
@@ -29,6 +30,7 @@ fn ferx_rust_fit(
     optimizer: &str,
     inner_maxiter: i32,
     inner_tol: f64,
+    mu_referencing: bool,
 ) -> List {
     let mut parsed =
         match ferx_nlme::parser::model_parser::parse_full_model_file(Path::new(model_path)) {
@@ -89,6 +91,7 @@ fn ferx_rust_fit(
     // Inner optimizer settings
     opts.inner_maxiter = inner_maxiter as usize;
     opts.inner_tol = inner_tol;
+    opts.mu_referencing = mu_referencing;
 
     // Outer optimizer override
     match optimizer.trim().to_lowercase().as_str() {

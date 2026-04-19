@@ -31,6 +31,10 @@
 #' @param inner_tol Convergence tolerance for the inner (individual)
 #'   optimizer. Default is \code{1e-6}. Looser values (e.g. \code{1e-4})
 #'   speed up each outer iteration; tighter values improve accuracy.
+#' @param mu_referencing Logical. If \code{TRUE} (default), automatically
+#'   detects mu-referencing from the model structure for faster and more
+#'   accurate convergence. Applies to all estimation methods. Set to
+#'   \code{FALSE} to disable for comparison purposes.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -50,6 +54,15 @@
 #' @examples
 #' \dontrun{
 #' ex <- ferx_example("warfarin")
+#'
+#' # Default — mu-referencing on
+#' fit <- ferx_fit(ex$model, ex$data)
+#'
+#' # Compare with mu-referencing off
+#' fit_no_mu <- ferx_fit(ex$model, ex$data, mu_referencing = FALSE)
+#'
+#' # Check which ETAs were detected
+#' fit$warnings
 #'
 #' # Default SLSQP optimizer
 #' fit <- ferx_fit(ex$model, ex$data)
@@ -80,8 +93,12 @@ ferx_fit <- function(model, data,
                      bloq_method = NULL,
                      optimizer = "slsqp",
                      inner_maxiter = 200L,
-                     inner_tol = 1e-6) {
+                     inner_tol = 1e-6,
+                     mu_referencing = TRUE) {
   stopifnot(file.exists(model), file.exists(data))
+  if (!is.logical(mu_referencing) || length(mu_referencing) != 1L || is.na(mu_referencing)) {
+    stop("`mu_referencing` must be TRUE or FALSE")
+  }
   method <- match.arg(
     tolower(gsub("[^a-z0-9]", "_", method)),
     c("foce", "focei", "saem", "gn", "gn_hybrid")
@@ -106,7 +123,8 @@ ferx_fit <- function(model, data,
     bloq_method = bloq_arg,
     optimizer = optimizer,
     inner_maxiter = as.integer(inner_maxiter),
-    inner_tol = as.double(inner_tol)
+    inner_tol = as.double(inner_tol),
+    mu_referencing = mu_referencing
   )
 
   if (length(raw) == 0) {
@@ -138,6 +156,13 @@ ferx_fit <- function(model, data,
   # Clean up internal fields
   result$theta_names <- NULL
   result$omega_dim <- NULL
+
+  # Print mu-referencing detections as informational messages
+  mu_ref_warnings <- grep("mu-ref", result$warnings, value = TRUE)
+  for (w in mu_ref_warnings) {
+    eta_names <- sub("^mu-ref:\\s*", "", w)
+    message("Mu-referencing detected for: ", eta_names)
+  }
 
   class(result) <- "ferx_fit"
   result

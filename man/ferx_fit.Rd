@@ -14,7 +14,8 @@ ferx_fit(
   bloq_method = NULL,
   optimizer = "slsqp",
   inner_maxiter = 200L,
-  inner_tol = 1e-06
+  inner_tol = 1e-06,
+  mu_referencing = TRUE
 )
 }
 \arguments{
@@ -55,6 +56,11 @@ converging.}
 \item{inner_tol}{Convergence tolerance for the inner (individual)
 optimizer. Default is \code{1e-6}. Looser values (e.g. \code{1e-4})
 speed up each outer iteration; tighter values improve accuracy.}
+
+\item{mu_referencing}{Logical. If \code{TRUE} (default), automatically
+detects mu-referencing from the model structure for faster and more
+accurate convergence. Applies to all estimation methods. Set to
+\code{FALSE} to disable for comparison purposes.}
 }
 \value{
 A list with components:
@@ -79,6 +85,15 @@ powered by automatic differentiation (Enzyme).
 \examples{
 \dontrun{
 ex <- ferx_example("warfarin")
+
+# Default — mu-referencing on
+fit <- ferx_fit(ex$model, ex$data)
+
+# Compare with mu-referencing off
+fit_no_mu <- ferx_fit(ex$model, ex$data, mu_referencing = FALSE)
+
+# Check which ETAs were detected
+fit$warnings
 
 # Default SLSQP optimizer
 fit <- ferx_fit(ex$model, ex$data)
