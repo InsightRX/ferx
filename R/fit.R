@@ -34,7 +34,12 @@
 #' @param mu_referencing Logical. If \code{TRUE} (default), automatically
 #'   detects mu-referencing from the model structure for faster and more
 #'   accurate convergence. Applies to all estimation methods. Set to
-#'   \code{FALSE} to disable for comparison purposes.
+#'   \code{FALSE} to disable for comparison purposes. Detection works
+#'   automatically for standard parameterizations such as
+#'   \code{PARAM = THETA * exp(ETA)}; unusual parameterizations fall back
+#'   silently to zero-centred ETA initialisation with no error. No changes
+#'   to the \code{.ferx} model file are needed. Check \code{fit$warnings}
+#'   to see which ETAs were detected.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
