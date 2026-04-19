@@ -18,7 +18,19 @@
 #'   on \code{CENS=1} rows); \code{"drop"} disables M3.
 #' @param optimizer Outer optimizer used during estimation. One of
 #'   \code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
-#'   \code{"bobyqa"}, or \code{"trust_region"}.
+#'   \code{"bobyqa"}, or \code{"trust_region"}. \code{"slsqp"} and
+#'   \code{"lbfgs"} use gradient information from Enzyme autodiff and are
+#'   fastest on smooth surfaces. \code{"bobyqa"} is derivative-free and more
+#'   robust on discontinuous or noisy objectives. \code{"trust_region"} uses a
+#'   second-order trust-region method. \code{"mma"} is a gradient-based
+#'   method-of-moving-asymptotes approach.
+#' @param inner_maxiter Maximum number of inner (individual) optimization
+#'   iterations per outer step. Default is \code{200}. Reduce for speed at the
+#'   cost of inner convergence accuracy; increase if individual fits are not
+#'   converging.
+#' @param inner_tol Convergence tolerance for the inner (individual)
+#'   optimizer. Default is \code{1e-6}. Looser values (e.g. \code{1e-4})
+#'   speed up each outer iteration; tighter values improve accuracy.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -37,9 +49,22 @@
 #'
 #' @examples
 #' \dontrun{
-#' result <- ferx_fit("warfarin.ferx", "warfarin.csv")
-#' result$theta
-#' head(result$sdtab)
+#' ex <- ferx_example("warfarin")
+#'
+#' # Default SLSQP optimizer
+#' fit <- ferx_fit(ex$model, ex$data)
+#'
+#' # Derivative-free BOBYQA — more robust on difficult surfaces
+#' fit_bobyqa <- ferx_fit(ex$model, ex$data, optimizer = "bobyqa")
+#'
+#' # Second-order trust region
+#' fit_tr <- ferx_fit(ex$model, ex$data, optimizer = "trust_region")
+#'
+#' # Fine-tune inner loop speed
+#' fit_fast <- ferx_fit(ex$model, ex$data,
+#'                      optimizer = "bobyqa",
+#'                      inner_maxiter = 100,
+#'                      inner_tol = 1e-6)
 #'
 #' # Likelihood-based BLOQ handling (M3):
 #' bloq <- ferx_example("warfarin_bloq")
@@ -53,7 +78,9 @@ ferx_fit <- function(model, data,
                      covariance = TRUE,
                      verbose = TRUE,
                      bloq_method = NULL,
-                     optimizer = "slsqp") {
+                     optimizer = "slsqp",
+                     inner_maxiter = 200L,
+                     inner_tol = 1e-6) {
   stopifnot(file.exists(model), file.exists(data))
   method <- match.arg(
     tolower(gsub("[^a-z0-9]", "_", method)),
@@ -77,7 +104,9 @@ ferx_fit <- function(model, data,
     covariance = covariance,
     verbose = verbose,
     bloq_method = bloq_arg,
-    optimizer = optimizer
+    optimizer = optimizer,
+    inner_maxiter = as.integer(inner_maxiter),
+    inner_tol = as.double(inner_tol)
   )
 
   if (length(raw) == 0) {

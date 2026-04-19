@@ -13,6 +13,8 @@ use std::path::Path;
 /// @param verbose Print progress (TRUE/FALSE)
 /// @param bloq_method BLOQ handling: "drop", "m3", or "" to use the model default
 /// @param optimizer Outer optimizer: "slsqp", "lbfgs", "mma", "bobyqa", or "trust_region"
+/// @param inner_maxiter Maximum inner (individual) optimizer iterations
+/// @param inner_tol Convergence tolerance for the inner optimizer
 /// @return Named list with fit results
 /// @export
 #[extendr]
@@ -25,6 +27,8 @@ fn ferx_rust_fit(
     verbose: bool,
     bloq_method: &str,
     optimizer: &str,
+    inner_maxiter: i32,
+    inner_tol: f64,
 ) -> List {
     let mut parsed =
         match ferx_nlme::parser::model_parser::parse_full_model_file(Path::new(model_path)) {
@@ -81,6 +85,10 @@ fn ferx_rust_fit(
     }
     // Mirror onto the compiled model so likelihood functions pick it up.
     parsed.model.bloq_method = opts.bloq_method;
+
+    // Inner optimizer settings
+    opts.inner_maxiter = inner_maxiter as usize;
+    opts.inner_tol = inner_tol;
 
     // Outer optimizer override
     match optimizer.trim().to_lowercase().as_str() {
