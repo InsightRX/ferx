@@ -27,20 +27,22 @@
 #'   or to avoid SMT-induced contention (try
 #'   \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 #'   so successive fits in the same R session can use different values.
+#' @param optimizer Outer optimizer used during estimation. One of
+#'   \code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
+#'   \code{"bobyqa"}, or \code{"trust_region"}.
 #' @param settings Optional named list of estimation-method-specific options
 #'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 #'   not have a dedicated \code{ferx_fit()} argument, without needing a new
 #'   wrapper release for each option. Recognized keys include SAEM
 #'   (\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
 #'   \code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
-#'   \code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
-#'   and optimizer selection (\code{optimizer}, \code{global_search},
-#'   \code{global_maxeval}). Values that duplicate a dedicated argument
+#'   \code{sir_resamples}, \code{sir_seed}), and Gauss-Newton (\code{gn_lambda}).
+#'   Values that duplicate a dedicated argument
 #'   (\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
-#'   \code{bloq_method}, \code{threads}) are rejected — pass them via the
-#'   dedicated argument. Unknown keys and malformed values also raise an
-#'   error. Settings apply on top of the model file's \code{[fit_options]}
-#'   block.
+#'   \code{bloq_method}, \code{threads}, \code{optimizer}) are rejected — pass
+#'   them via the dedicated argument. Unknown keys and malformed values also
+#'   raise an error. Settings apply on top of the model file's
+#'   \code{[fit_options]} block.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -91,6 +93,7 @@ ferx_fit <- function(model, data,
                      verbose = TRUE,
                      bloq_method = NULL,
                      threads = NULL,
+                     optimizer = "slsqp",
                      settings = NULL) {
   stopifnot(file.exists(model), file.exists(data))
   if (!is.character(method) || length(method) == 0L) {
@@ -121,6 +124,10 @@ ferx_fit <- function(model, data,
     }
     threads_arg <- as.integer(threads)
   }
+  optimizer <- match.arg(
+    tolower(optimizer),
+    c("slsqp", "lbfgs", "mma", "bobyqa", "trust_region")
+  )
 
   settings_parts <- .ferx_settings_to_strings(settings)
 
@@ -133,6 +140,7 @@ ferx_fit <- function(model, data,
     verbose = verbose,
     bloq_method = bloq_arg,
     threads = threads_arg,
+    optimizer = optimizer,
     settings_keys = settings_parts$keys,
     settings_values = settings_parts$values
   )

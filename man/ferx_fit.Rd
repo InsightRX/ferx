@@ -13,6 +13,7 @@ ferx_fit(
   verbose = TRUE,
   bloq_method = NULL,
   threads = NULL,
+  optimizer = "slsqp",
   settings = NULL
 )
 }
@@ -49,19 +50,22 @@ or to avoid SMT-induced contention (try
 \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 so successive fits in the same R session can use different values.}
 
+\item{optimizer}{Outer optimizer used during estimation. One of
+\code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
+\code{"bobyqa"}, or \code{"trust_region"}.}
+
 \item{settings}{Optional named list of estimation-method-specific options
 forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 not have a dedicated \code{ferx_fit()} argument, without needing a new
 wrapper release for each option. Recognized keys include SAEM
 (\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
 \code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
-\code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
-and optimizer selection (\code{optimizer}, \code{global_search},
-\code{global_maxeval}). Values that duplicate a dedicated argument
+\code{sir_resamples}, \code{sir_seed}), and Gauss-Newton (\code{gn_lambda}).
+Values that duplicate a dedicated argument
 (\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
-\code{bloq_method}, \code{threads}) are rejected — pass them via the
-dedicated argument. Unknown keys and malformed values also raise an
-error. Settings apply on top of the model file's \code{[fit_options]}
+\code{bloq_method}, \code{threads}, \code{optimizer}) are rejected — pass
+them via the dedicated argument. Unknown keys and malformed values also
+raise an error. Settings apply on top of the model file's \code{[fit_options]}
 block.}
 }
 \value{

@@ -59,11 +59,11 @@ const POLL_MS: u64 = 100;
 ///   loops. Pass `0` (or any value `<= 0`) to leave rayon's global pool alone
 ///   (one worker per logical CPU). Positive values run this fit inside a
 ///   scoped local pool of that size.
+/// @param optimizer Outer optimizer: "slsqp", "lbfgs", "mma", "bobyqa", or "trust_region"
 /// @param settings_keys Parallel vector of setting names (pre-stringified).
 ///   Used together with `settings_values` to pass generic estimation-method
 ///   options (e.g. `n_exploration`, `sir_samples`) without needing a new
 ///   R-Rust argument per option. Keys that duplicate a dedicated argument
-///   (`method`, `maxiter`, `covariance`, `verbose`, `bloq_method`, `threads`)
 ///   are rejected so there is a single source of truth. Unknown keys and
 ///   malformed values also raise an error.
 /// @param settings_values Parallel vector of setting values as strings;
@@ -81,6 +81,7 @@ fn ferx_rust_fit(
     verbose: bool,
     bloq_method: &str,
     threads: i32,
+    optimizer: &str,
     settings_keys: Vec<String>,
     settings_values: Vec<String>,
 ) -> List {
@@ -124,6 +125,7 @@ fn ferx_rust_fit(
         "bloq_method",
         "bloq",
         "threads",
+        "optimizer",
     ];
     for (k, v) in settings_keys.iter().zip(settings_values.iter()) {
         let key = k.trim();
@@ -189,6 +191,22 @@ fn ferx_rust_fit(
     }
     // Mirror onto the compiled model so likelihood functions pick it up.
     parsed.model.bloq_method = opts.bloq_method;
+
+    // Outer optimizer override
+    match optimizer.trim().to_lowercase().as_str() {
+        "" | "slsqp" => opts.optimizer = Optimizer::Slsqp,
+        "lbfgs" => opts.optimizer = Optimizer::Lbfgs,
+        "mma" => opts.optimizer = Optimizer::Mma,
+        "bobyqa" => opts.optimizer = Optimizer::Bobyqa,
+        "trust_region" => opts.optimizer = Optimizer::TrustRegion,
+        other => {
+            rprintln!(
+                "Unknown optimizer '{}' — expected slsqp, lbfgs, mma, bobyqa, or trust_region (falling back to slsqp)",
+                other
+            );
+            opts.optimizer = Optimizer::Slsqp;
+        }
+    }
 
     // Install a cancellation token so Ctrl-C on the R console aborts the fit.
     let cancel = CancelFlag::new();
