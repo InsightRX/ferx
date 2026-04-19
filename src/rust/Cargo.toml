@@ -10,8 +10,8 @@ crate-type = ["staticlib"]
 
 [dependencies]
 extendr-api = "0.7"
-ferx-nlme = { path = "../../../ferx-nlme", features = ["autodiff"] }
+ferx-nlme = { path = "../../../ferx-nlme", default-features = false, features = ["ci"] }
 nalgebra = "0.33"
 
 [profile.release]
-lto = "fat"
+lto = "thin"

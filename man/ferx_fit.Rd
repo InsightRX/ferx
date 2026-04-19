@@ -11,7 +11,8 @@ ferx_fit(
   maxiter = 500L,
   covariance = TRUE,
   verbose = TRUE,
-  bloq_method = NULL
+  bloq_method = NULL,
+  optimizer = "slsqp"
 )
 }
 \arguments{
@@ -34,6 +35,10 @@ quantification. \code{NULL} (default) keeps whatever the model file
 specified; \code{"m3"} enables Beal's M3 likelihood (requires a
 \code{CENS} column in the data, with \code{DV} carrying the LLOQ value
 on \code{CENS=1} rows); \code{"drop"} disables M3.}
+
+\item{optimizer}{Outer optimizer used during estimation. One of
+\code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
+\code{"bobyqa"}, or \code{"trust_region"}.}
 }
 \value{
 A list with components:

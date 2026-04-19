@@ -16,6 +16,9 @@
 #'   specified; \code{"m3"} enables Beal's M3 likelihood (requires a
 #'   \code{CENS} column in the data, with \code{DV} carrying the LLOQ value
 #'   on \code{CENS=1} rows); \code{"drop"} disables M3.
+#' @param optimizer Outer optimizer used during estimation. One of
+#'   \code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
+#'   \code{"bobyqa"}, or \code{"trust_region"}.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -49,7 +52,8 @@ ferx_fit <- function(model, data,
                      maxiter = 500L,
                      covariance = TRUE,
                      verbose = TRUE,
-                     bloq_method = NULL) {
+                     bloq_method = NULL,
+                     optimizer = "slsqp") {
   stopifnot(file.exists(model), file.exists(data))
   method <- match.arg(
     tolower(gsub("[^a-z0-9]", "_", method)),
@@ -60,6 +64,10 @@ ferx_fit <- function(model, data,
   } else {
     bloq_arg <- match.arg(tolower(bloq_method), c("drop", "m3"))
   }
+  optimizer <- match.arg(
+    tolower(optimizer),
+    c("slsqp", "lbfgs", "mma", "bobyqa", "trust_region")
+  )
 
   raw <- ferx_rust_fit(
     model_path = normalizePath(model),
@@ -68,7 +76,8 @@ ferx_fit <- function(model, data,
     maxiter = as.integer(maxiter),
     covariance = covariance,
     verbose = verbose,
-    bloq_method = bloq_arg
+    bloq_method = bloq_arg,
+    optimizer = optimizer
   )
 
   if (length(raw) == 0) {

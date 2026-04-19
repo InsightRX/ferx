@@ -12,6 +12,7 @@ use std::path::Path;
 /// @param covariance Run covariance step (TRUE/FALSE)
 /// @param verbose Print progress (TRUE/FALSE)
 /// @param bloq_method BLOQ handling: "drop", "m3", or "" to use the model default
+/// @param optimizer Outer optimizer: "slsqp", "lbfgs", "mma", "bobyqa", or "trust_region"
 /// @return Named list with fit results
 /// @export
 #[extendr]
@@ -23,6 +24,7 @@ fn ferx_rust_fit(
     covariance: bool,
     verbose: bool,
     bloq_method: &str,
+    optimizer: &str,
 ) -> List {
     let mut parsed =
         match ferx_nlme::parser::model_parser::parse_full_model_file(Path::new(model_path)) {
@@ -79,6 +81,22 @@ fn ferx_rust_fit(
     }
     // Mirror onto the compiled model so likelihood functions pick it up.
     parsed.model.bloq_method = opts.bloq_method;
+
+    // Outer optimizer override
+    match optimizer.trim().to_lowercase().as_str() {
+        "" | "slsqp" => opts.optimizer = Optimizer::Slsqp,
+        "lbfgs" => opts.optimizer = Optimizer::Lbfgs,
+        "mma" => opts.optimizer = Optimizer::Mma,
+        "bobyqa" => opts.optimizer = Optimizer::Bobyqa,
+        "trust_region" => opts.optimizer = Optimizer::TrustRegion,
+        other => {
+            rprintln!(
+                "Unknown optimizer '{}' — expected slsqp, lbfgs, mma, bobyqa, or trust_region (falling back to slsqp)",
+                other
+            );
+            opts.optimizer = Optimizer::Slsqp;
+        }
+    }
 
     // Build initial parameters (initial values now live in [parameters] block)
     let init_params = parsed.model.default_params.clone();
