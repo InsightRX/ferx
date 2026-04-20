@@ -9,7 +9,7 @@ NULL
 
 #' @export
 ferx_rust_fit <- function(model_path, data_path, method, maxiter, covariance, verbose, bloq_method) {
-  .Call("wrap__ferx_rust_fit", model_path, data_path, method, maxiter, covariance, verbose, bloq_method)
+  .Call("wrap__ferx_rust_fit", model_path, data_path, as.character(method), maxiter, covariance, verbose, bloq_method)
 }
 
 #' @export
