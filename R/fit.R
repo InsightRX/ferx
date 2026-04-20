@@ -5,9 +5,13 @@
 #'
 #' @param model Path to a .ferx model file
 #' @param data Path to a NONMEM-format CSV file (ID, TIME, DV, EVID, AMT, CMT, ...)
-#' @param method Estimation method. One of \code{"foce"}, \code{"focei"},
-#'   \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or \code{"gn_hybrid"}
-#'   (Gauss-Newton followed by a FOCEI polish step).
+#' @param method Estimation method(s). Either a single string or a character
+#'   vector of methods to run in sequence. Each stage is seeded with the
+#'   previous stage's converged parameters, and only the final stage produces
+#'   the reported covariance/diagnostics. Supported methods: \code{"foce"},
+#'   \code{"focei"}, \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or
+#'   \code{"gn_hybrid"} (Gauss-Newton followed by a FOCEI polish step).
+#'   Example chain: \code{c("saem", "focei")}.
 #' @param maxiter Maximum number of outer optimization iterations
 #' @param covariance Logical; compute the covariance step for standard errors
 #' @param verbose Logical; print progress during estimation
@@ -38,6 +42,10 @@
 #' result$theta
 #' head(result$sdtab)
 #'
+#' # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
+#' result <- ferx_fit("warfarin.ferx", "warfarin.csv",
+#'                    method = c("saem", "focei"))
+#'
 #' # Likelihood-based BLOQ handling (M3):
 #' bloq <- ferx_example("warfarin_bloq")
 #' result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
@@ -51,9 +59,19 @@ ferx_fit <- function(model, data,
                      verbose = TRUE,
                      bloq_method = NULL) {
   stopifnot(file.exists(model), file.exists(data))
-  method <- match.arg(
-    tolower(gsub("[^a-z0-9]", "_", method)),
-    c("foce", "focei", "saem", "gn", "gn_hybrid")
+  if (!is.character(method) || length(method) == 0L) {
+    stop("`method` must be a non-empty character vector")
+  }
+  method <- vapply(
+    method,
+    function(m) {
+      match.arg(
+        tolower(gsub("[^a-z0-9]", "_", m)),
+        c("foce", "focei", "saem", "gn", "gn_hybrid")
+      )
+    },
+    character(1L),
+    USE.NAMES = FALSE
   )
   if (is.null(bloq_method)) {
     bloq_arg <- ""
@@ -107,7 +125,12 @@ ferx_fit <- function(model, data,
 
 #' @export
 print.ferx_fit <- function(x, ...) {
-  cat("NLME Fit Result (", x$method, ")\n", sep = "")
+  header <- if (!is.null(x$method_chain) && length(x$method_chain) > 1) {
+    paste(x$method_chain, collapse = " -> ")
+  } else {
+    x$method
+  }
+  cat("NLME Fit Result (", header, ")\n", sep = "")
   cat("  Converged:", x$converged, "\n")
   cat("  OFV:", round(x$ofv, 4), " AIC:", round(x$aic, 4), " BIC:", round(x$bic, 4), "\n")
   cat("  Subjects:", x$n_subjects, " Observations:", x$n_obs, "\n\n")

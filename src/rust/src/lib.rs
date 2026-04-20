@@ -7,7 +7,9 @@ use std::path::Path;
 ///
 /// @param model_path Path to .ferx model file
 /// @param data_path Path to NONMEM-format CSV
-/// @param method Estimation method: "foce" or "focei"
+/// @param method Character vector of estimation methods. A single element runs
+///   one stage (e.g. "focei"); multiple elements chain stages, each seeded with
+///   the previous stage's converged parameters (e.g. c("saem", "focei")).
 /// @param maxiter Maximum outer iterations
 /// @param covariance Run covariance step (TRUE/FALSE)
 /// @param verbose Print progress (TRUE/FALSE)
@@ -18,7 +20,7 @@ use std::path::Path;
 fn ferx_rust_fit(
     model_path: &str,
     data_path: &str,
-    method: &str,
+    method: Vec<String>,
     maxiter: i32,
     covariance: bool,
     verbose: bool,
@@ -43,23 +45,21 @@ fn ferx_rust_fit(
 
     // Build fit options
     let mut opts = parsed.fit_options.clone();
-    let m = method.to_lowercase();
-    if m.contains("saem") {
-        opts.method = EstimationMethod::Saem;
-        opts.interaction = false;
-    } else if m.contains("hybrid") {
-        opts.method = EstimationMethod::FoceGnHybrid;
-        opts.interaction = false;
-    } else if m.contains("gn") || m.contains("gauss") {
-        opts.method = EstimationMethod::FoceGn;
-        opts.interaction = false;
-    } else if m.contains("focei") || m.contains("foce-i") || m.contains("interaction") {
-        opts.method = EstimationMethod::FoceI;
-        opts.interaction = true;
-    } else {
-        opts.method = EstimationMethod::Foce;
-        opts.interaction = false;
+    if method.is_empty() {
+        rprintln!("Error: `method` must contain at least one estimation method");
+        return List::new(0);
     }
+    let chain: Vec<EstimationMethod> = match method.iter().map(|m| parse_method(m)).collect() {
+        Ok(v) => v,
+        Err(e) => {
+            rprintln!("{}", e);
+            return List::new(0);
+        }
+    };
+    let final_method = *chain.last().unwrap();
+    opts.method = final_method;
+    opts.interaction = final_method == EstimationMethod::FoceI;
+    opts.methods = if chain.len() > 1 { chain } else { Vec::new() };
     opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
@@ -279,6 +279,28 @@ fn ferx_rust_predict_from_fit(
     data_frame!(ID = id, TIME = time, PRED = pred).into()
 }
 
+// -- Helper: parse a single R-side method token into EstimationMethod --
+
+fn parse_method(token: &str) -> std::result::Result<EstimationMethod, String> {
+    let m = token.trim().to_lowercase();
+    if m == "saem" {
+        Ok(EstimationMethod::Saem)
+    } else if m.contains("hybrid") {
+        Ok(EstimationMethod::FoceGnHybrid)
+    } else if m == "gn" || m.contains("gauss") {
+        Ok(EstimationMethod::FoceGn)
+    } else if m == "focei" || m == "foce-i" || m == "foce_i" || m.contains("interaction") {
+        Ok(EstimationMethod::FoceI)
+    } else if m == "foce" {
+        Ok(EstimationMethod::Foce)
+    } else {
+        Err(format!(
+            "Unknown estimation method '{}' — expected one of: foce, focei, saem, gn, gn_hybrid",
+            token.trim()
+        ))
+    }
+}
+
 // -- Helper: materialize ModelParameters from R-side theta/omega/sigma --
 
 fn params_from_fit(
@@ -390,17 +412,17 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
     // Warnings
     let warnings: Vec<String> = result.warnings.clone();
 
-    let method_label = match result.method {
-        EstimationMethod::Saem => "SAEM",
-        EstimationMethod::FoceI => "FOCEI",
-        EstimationMethod::Foce => "FOCE",
-        EstimationMethod::FoceGn => "FOCE-GN",
-        EstimationMethod::FoceGnHybrid => "FOCE-GN-Hybrid",
-    };
+    let method_label = result.method.label();
+    let method_chain: Vec<String> = result
+        .method_chain
+        .iter()
+        .map(|m| m.label().to_string())
+        .collect();
 
     list!(
         converged = result.converged,
         method = method_label,
+        method_chain = method_chain,
         ofv = result.ofv,
         aic = result.aic,
         bic = result.bic,
