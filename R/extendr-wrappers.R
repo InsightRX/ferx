@@ -8,8 +8,8 @@
 NULL
 
 #' @export
-ferx_rust_fit <- function(model_path, data_path, method, maxiter, covariance, verbose, bloq_method, optimizer, inner_maxiter, inner_tol, mu_referencing) {
-  .Call("wrap__ferx_rust_fit", model_path, data_path, method, maxiter, covariance, verbose, bloq_method, optimizer, inner_maxiter, inner_tol, mu_referencing)
+ferx_rust_fit <- function(model_path, data_path, method, maxiter, covariance, verbose, bloq_method, optimizer, inner_maxiter, inner_tol, mu_referencing, steihaug_max_iters) {
+  .Call("wrap__ferx_rust_fit", model_path, data_path, method, maxiter, covariance, verbose, bloq_method, optimizer, inner_maxiter, inner_tol, mu_referencing, steihaug_max_iters)
 }
 
 #' @export

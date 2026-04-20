@@ -16,6 +16,7 @@ use std::path::Path;
 /// @param inner_maxiter Maximum inner (individual) optimizer iterations
 /// @param inner_tol Convergence tolerance for the inner optimizer
 /// @param mu_referencing Use mu-referencing for ETA initialisation (TRUE/FALSE)
+/// @param steihaug_max_iters Maximum CG iterations for Steihaug subproblem (trust_region only)
 /// @return Named list with fit results
 /// @export
 #[extendr]
@@ -31,6 +32,7 @@ fn ferx_rust_fit(
     inner_maxiter: i32,
     inner_tol: f64,
     mu_referencing: bool,
+    steihaug_max_iters: i32,
 ) -> List {
     let mut parsed =
         match ferx_nlme::parser::model_parser::parse_full_model_file(Path::new(model_path)) {
@@ -92,6 +94,7 @@ fn ferx_rust_fit(
     opts.inner_maxiter = inner_maxiter as usize;
     opts.inner_tol = inner_tol;
     opts.mu_referencing = mu_referencing;
+    opts.steihaug_max_iters = steihaug_max_iters as usize;
 
     // Outer optimizer override
     match optimizer.trim().to_lowercase().as_str() {

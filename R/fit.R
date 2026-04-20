@@ -40,6 +40,11 @@
 #'   silently to zero-centred ETA initialisation with no error. No changes
 #'   to the \code{.ferx} model file are needed. Check \code{fit$warnings}
 #'   to see which ETAs were detected.
+#' @param steihaug_max_iters Maximum conjugate-gradient iterations for the
+#'   Steihaug subproblem solver, used only when \code{optimizer = "trust_region"}.
+#'   Default is \code{50}, which covers most population PK models (1- and
+#'   2-compartment with covariates). Increase for complex models with more than
+#'   50 parameters; the theoretical maximum needed is \code{n_params}.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -78,6 +83,10 @@
 #' # Second-order trust region
 #' fit_tr <- ferx_fit(ex$model, ex$data, optimizer = "trust_region")
 #'
+#' # Trust region with more CG iterations for a complex model (25+ parameters)
+#' fit_tr2 <- ferx_fit(ex$model, ex$data, optimizer = "trust_region",
+#'                     steihaug_max_iters = 100L)
+#'
 #' # Fine-tune inner loop speed
 #' fit_fast <- ferx_fit(ex$model, ex$data,
 #'                      optimizer = "bobyqa",
@@ -99,7 +108,8 @@ ferx_fit <- function(model, data,
                      optimizer = "slsqp",
                      inner_maxiter = 200L,
                      inner_tol = 1e-6,
-                     mu_referencing = TRUE) {
+                     mu_referencing = TRUE,
+                     steihaug_max_iters = 50L) {
   stopifnot(file.exists(model), file.exists(data))
   if (!is.logical(mu_referencing) || length(mu_referencing) != 1L || is.na(mu_referencing)) {
     stop("`mu_referencing` must be TRUE or FALSE")
@@ -129,7 +139,8 @@ ferx_fit <- function(model, data,
     optimizer = optimizer,
     inner_maxiter = as.integer(inner_maxiter),
     inner_tol = as.double(inner_tol),
-    mu_referencing = mu_referencing
+    mu_referencing = mu_referencing,
+    steihaug_max_iters = as.integer(steihaug_max_iters)
   )
 
   if (length(raw) == 0) {
