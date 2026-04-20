@@ -5,9 +5,13 @@
 #'
 #' @param model Path to a .ferx model file
 #' @param data Path to a NONMEM-format CSV file (ID, TIME, DV, EVID, AMT, CMT, ...)
-#' @param method Estimation method. One of \code{"foce"}, \code{"focei"},
-#'   \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or \code{"gn_hybrid"}
-#'   (Gauss-Newton followed by a FOCEI polish step).
+#' @param method Estimation method(s). Either a single string or a character
+#'   vector of methods to run in sequence. Each stage is seeded with the
+#'   previous stage's converged parameters, and only the final stage produces
+#'   the reported covariance/diagnostics. Supported methods: \code{"foce"},
+#'   \code{"focei"}, \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or
+#'   \code{"gn_hybrid"} (Gauss-Newton followed by a FOCEI polish step).
+#'   Example chain: \code{c("saem", "focei")}.
 #' @param maxiter Maximum number of outer optimization iterations
 #' @param covariance Logical; compute the covariance step for standard errors
 #' @param verbose Logical; print progress during estimation
@@ -49,6 +53,7 @@
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
 #'   \item{method}{Estimation method used}
+#'   \item{n_iterations}{Number of outer iterations run}
 #'   \item{ofv}{Objective function value (-2 log-likelihood)}
 #'   \item{aic}{Akaike Information Criterion}
 #'   \item{bic}{Bayesian Information Criterion}
@@ -60,6 +65,9 @@
 #'   \item{se_sigma}{Standard errors for sigma}
 #'   \item{sdtab}{Data frame with ID, TIME, DV, PRED, IPRED, CWRES, IWRES, ETA1..n}
 #'   \item{warnings}{Character vector of warnings}
+#'   \item{sir_ess}{SIR effective sample size (NULL if SIR not run)}
+#'   \item{sir_ci_theta, sir_ci_omega, sir_ci_sigma}{SIR 95\% CI matrices
+#'     with columns \code{lower} and \code{upper} (NULL if SIR not run)}
 #'
 #' @examples
 #' \dontrun{
@@ -93,6 +101,10 @@
 #'                      inner_maxiter = 100,
 #'                      inner_tol = 1e-6)
 #'
+#' # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
+#' result <- ferx_fit("warfarin.ferx", "warfarin.csv",
+#'                    method = c("saem", "focei"))
+#'
 #' # Likelihood-based BLOQ handling (M3):
 #' bloq <- ferx_example("warfarin_bloq")
 #' result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
@@ -114,9 +126,19 @@ ferx_fit <- function(model, data,
   if (!is.logical(mu_referencing) || length(mu_referencing) != 1L || is.na(mu_referencing)) {
     stop("`mu_referencing` must be TRUE or FALSE")
   }
-  method <- match.arg(
-    tolower(gsub("[^a-z0-9]", "_", method)),
-    c("foce", "focei", "saem", "gn", "gn_hybrid")
+  if (!is.character(method) || length(method) == 0L) {
+    stop("`method` must be a non-empty character vector")
+  }
+  method <- vapply(
+    method,
+    function(m) {
+      match.arg(
+        tolower(gsub("[^a-z0-9]", "_", m)),
+        c("foce", "focei", "saem", "gn", "gn_hybrid")
+      )
+    },
+    character(1L),
+    USE.NAMES = FALSE
   )
   if (is.null(bloq_method)) {
     bloq_arg <- ""
@@ -169,6 +191,23 @@ ferx_fit <- function(model, data,
   if (length(result$se_omega) == 0) result$se_omega <- NULL
   if (length(result$se_sigma) == 0) result$se_sigma <- NULL
 
+  # SIR: NaN ess => not computed; flat [lo, hi, lo, hi, ...] => (n, 2) matrix
+  if (is.null(result$sir_ess) || !is.finite(result$sir_ess)) {
+    result$sir_ess <- NULL
+  }
+  reshape_ci <- function(v, row_names = NULL) {
+    if (length(v) == 0) return(NULL)
+    m <- matrix(v, ncol = 2, byrow = TRUE,
+                dimnames = list(row_names, c("lower", "upper")))
+    m
+  }
+  result$sir_ci_theta <- reshape_ci(result$sir_ci_theta, result$theta_names)
+  n_eta <- if (is.null(dim(result$omega))) NULL else nrow(result$omega)
+  eta_names <- if (!is.null(n_eta)) paste0("OMEGA(", seq_len(n_eta), ",", seq_len(n_eta), ")") else NULL
+  result$sir_ci_omega <- reshape_ci(result$sir_ci_omega, eta_names)
+  sig_names <- paste0("SIGMA(", seq_along(result$sigma), ")")
+  result$sir_ci_sigma <- reshape_ci(result$sir_ci_sigma, sig_names)
+
   # Clean up internal fields
   result$theta_names <- NULL
   result$omega_dim <- NULL
@@ -186,27 +225,120 @@ ferx_fit <- function(model, data,
 
 #' @export
 print.ferx_fit <- function(x, ...) {
-  cat("NLME Fit Result (", x$method, ")\n", sep = "")
-  cat("  Converged:", x$converged, "\n")
-  cat("  OFV:", round(x$ofv, 4), " AIC:", round(x$aic, 4), " BIC:", round(x$bic, 4), "\n")
-  cat("  Subjects:", x$n_subjects, " Observations:", x$n_obs, "\n\n")
+  bar <- strrep("=", 60)
+  cat(bar, "\n", sep = "")
+  cat("NONLINEAR MIXED EFFECTS MODEL ESTIMATION\n")
+  cat(bar, "\n\n", sep = "")
 
-  cat("Theta estimates:\n")
-  if (!is.null(x$se_theta)) {
-    df <- data.frame(
-      Estimate = x$theta,
-      SE = x$se_theta,
-      RSE = paste0(round(abs(x$se_theta / x$theta) * 100, 1), "%")
-    )
+  cat("Converged: ", if (isTRUE(x$converged)) "YES" else "NO", "\n", sep = "")
+  if (!is.null(x$method_chain) && length(x$method_chain) > 1) {
+    cat("Estimation chain:  ", paste(x$method_chain, collapse = " -> "), "\n", sep = "")
   } else {
-    df <- data.frame(Estimate = x$theta)
+    cat("Estimation method: ", x$method, "\n", sep = "")
   }
-  print(df)
+  if (!is.null(x$n_iterations)) {
+    cat("Iterations: ", x$n_iterations, "\n", sep = "")
+  }
+
+  cat("\n--- Objective Function ---\n")
+  cat(sprintf("OFV:  %.4f\n", x$ofv))
+  cat(sprintf("AIC:  %.4f\n", x$aic))
+  cat(sprintf("BIC:  %.4f\n", x$bic))
+
+  n_par <- if (is.null(x$n_parameters)) NA_integer_ else x$n_parameters
+  cat(sprintf(
+    "\nSubjects: %d  Observations: %d  Parameters: %s\n",
+    x$n_subjects, x$n_obs,
+    if (is.na(n_par)) "?" else format(n_par)
+  ))
+
+  # THETA
+  cat("\n--- THETA Estimates ---\n")
+  cat(sprintf("%-16s %12s %12s %10s\n", "Parameter", "Estimate", "SE", "%RSE"))
+  cat(strrep("-", 52), "\n", sep = "")
+  theta_names <- names(x$theta)
+  if (is.null(theta_names)) theta_names <- paste0("THETA", seq_along(x$theta))
+  for (i in seq_along(x$theta)) {
+    est <- x$theta[i]
+    if (!is.null(x$se_theta) && length(x$se_theta) >= i) {
+      se_val <- x$se_theta[i]
+      rse <- if (abs(est) > 1e-12) abs(se_val / est) * 100 else NaN
+      se_str <- sprintf("%.6f", se_val)
+      rse_str <- sprintf("%.1f", rse)
+    } else {
+      se_str <- "N/A"; rse_str <- "N/A"
+    }
+    cat(sprintf("%-16s %12.6f %12s %10s\n", theta_names[i], est, se_str, rse_str))
+  }
+
+  # OMEGA
+  cat("\n--- OMEGA Estimates ---\n")
+  om <- x$omega
+  if (is.null(dim(om))) om <- matrix(om, 1, 1)
+  n_eta <- nrow(om)
+  has_offdiag <- FALSE
+  for (i in seq_len(n_eta)) {
+    var_ii <- om[i, i]
+    cv_pct <- if (var_ii > 0) sqrt(var_ii) * 100 else 0
+    se_str <- if (!is.null(x$se_omega) && length(x$se_omega) >= i) {
+      sprintf("%.6f", x$se_omega[i])
+    } else {
+      "N/A"
+    }
+    cat(sprintf(
+      "  OMEGA(%d,%d) = %.6f  (CV%% = %.1f)  SE = %s\n",
+      i, i, var_ii, cv_pct, se_str
+    ))
+    for (j in seq_len(i - 1L)) {
+      if (abs(om[i, j]) > 1e-15) has_offdiag <- TRUE
+    }
+  }
+  if (has_offdiag) {
+    cat("  --- Correlations ---\n")
+    for (i in seq_len(n_eta)) {
+      for (j in seq_len(i - 1L)) {
+        cov_ij <- om[i, j]
+        var_i <- om[i, i]; var_j <- om[j, j]
+        corr <- if (var_i > 0 && var_j > 0) cov_ij / (sqrt(var_i) * sqrt(var_j)) else 0
+        cat(sprintf(
+          "  OMEGA(%d,%d) = %.6f  (corr = %.4f)\n",
+          i, j, cov_ij, corr
+        ))
+      }
+    }
+  }
+
+  # SIGMA
+  cat("\n--- SIGMA Estimates ---\n")
+  for (i in seq_along(x$sigma)) {
+    se_str <- if (!is.null(x$se_sigma) && length(x$se_sigma) >= i) {
+      sprintf("%.6f", x$se_sigma[i])
+    } else {
+      "N/A"
+    }
+    cat(sprintf("  SIGMA(%d) = %.6f  SE = %s\n", i, x$sigma[i], se_str))
+  }
+
+  # SIR uncertainty
+  if (!is.null(x$sir_ess)) {
+    cat("\n--- SIR Uncertainty (95% CI) ---\n")
+    cat(sprintf("Effective sample size: %.1f\n", x$sir_ess))
+    print_ci <- function(m) {
+      if (is.null(m)) return(invisible())
+      for (i in seq_len(nrow(m))) {
+        cat(sprintf("  %s : [%.6f, %.6f]\n", rownames(m)[i], m[i, 1], m[i, 2]))
+      }
+    }
+    print_ci(x$sir_ci_theta)
+    print_ci(x$sir_ci_omega)
+    print_ci(x$sir_ci_sigma)
+  }
 
   if (length(x$warnings) > 0) {
-    cat("\nWarnings:\n")
+    cat("\n--- Warnings ---\n")
     for (w in x$warnings) cat("  *", w, "\n")
   }
 
+  cat(bar, "\n", sep = "")
   invisible(x)
 }

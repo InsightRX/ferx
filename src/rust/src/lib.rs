@@ -1,13 +1,56 @@
 use extendr_api::prelude::*;
+use ferx_nlme::cancel::CancelFlag;
 use ferx_nlme::types::*;
 use nalgebra::DMatrix;
 use std::path::Path;
+
+// ---------------------------------------------------------------------------
+//  R interrupt polling
+// ---------------------------------------------------------------------------
+//
+// When R is running long native code it cannot respond to Ctrl-C — R's SIGINT
+// handler only sets a flag that is checked on re-entry into R. To make our
+// fit cancellable we:
+//   1. Spawn the fit on a worker thread with a shared CancelFlag.
+//   2. Poll on the main (R) thread via `pending_interrupt()`, which wraps
+//      `R_CheckUserInterrupt` in `R_ToplevelExec` so the longjmp is contained
+//      (avoids UB from skipping Rust frames).
+//   3. When an interrupt is pending, flip the cancel flag and let the worker
+//      exit cooperatively; ferx_nlme::fit returns Err("cancelled by user").
+//
+// Declared here rather than pulling libR-sys to keep the dependency surface
+// small. These symbols are stable parts of R's public API (R.h / Rinterface.h).
+
+extern "C" {
+    fn R_CheckUserInterrupt();
+    fn R_ToplevelExec(
+        fun: extern "C" fn(*mut std::ffi::c_void),
+        data: *mut std::ffi::c_void,
+    ) -> std::ffi::c_int;
+}
+
+extern "C" fn check_interrupt_cb(_: *mut std::ffi::c_void) {
+    unsafe { R_CheckUserInterrupt() };
+}
+
+/// Returns true if an R interrupt (Ctrl-C) is pending. Safe to call repeatedly
+/// on the R main thread — does not longjmp because the check is wrapped in
+/// `R_ToplevelExec`.
+fn pending_interrupt() -> bool {
+    unsafe { R_ToplevelExec(check_interrupt_cb, std::ptr::null_mut()) == 0 }
+}
+
+/// Poll interval for the interrupt-check loop. 100ms keeps Ctrl-C responsive
+/// while adding negligible overhead to the worker.
+const POLL_MS: u64 = 100;
 
 /// Fit a NLME model to data.
 ///
 /// @param model_path Path to .ferx model file
 /// @param data_path Path to NONMEM-format CSV
-/// @param method Estimation method: "foce" or "focei"
+/// @param method Character vector of estimation methods. A single element runs
+///   one stage (e.g. "focei"); multiple elements chain stages, each seeded with
+///   the previous stage's converged parameters (e.g. c("saem", "focei")).
 /// @param maxiter Maximum outer iterations
 /// @param covariance Run covariance step (TRUE/FALSE)
 /// @param verbose Print progress (TRUE/FALSE)
@@ -23,7 +66,7 @@ use std::path::Path;
 fn ferx_rust_fit(
     model_path: &str,
     data_path: &str,
-    method: &str,
+    method: Vec<String>,
     maxiter: i32,
     covariance: bool,
     verbose: bool,
@@ -53,23 +96,21 @@ fn ferx_rust_fit(
 
     // Build fit options
     let mut opts = parsed.fit_options.clone();
-    let m = method.to_lowercase();
-    if m.contains("saem") {
-        opts.method = EstimationMethod::Saem;
-        opts.interaction = false;
-    } else if m.contains("hybrid") {
-        opts.method = EstimationMethod::FoceGnHybrid;
-        opts.interaction = false;
-    } else if m.contains("gn") || m.contains("gauss") {
-        opts.method = EstimationMethod::FoceGn;
-        opts.interaction = false;
-    } else if m.contains("focei") || m.contains("foce-i") || m.contains("interaction") {
-        opts.method = EstimationMethod::FoceI;
-        opts.interaction = true;
-    } else {
-        opts.method = EstimationMethod::Foce;
-        opts.interaction = false;
+    if method.is_empty() {
+        rprintln!("Error: `method` must contain at least one estimation method");
+        return List::new(0);
     }
+    let chain: Vec<EstimationMethod> = match method.iter().map(|m| parse_method(m)).collect() {
+        Ok(v) => v,
+        Err(e) => {
+            rprintln!("{}", e);
+            return List::new(0);
+        }
+    };
+    let final_method = *chain.last().unwrap();
+    opts.method = final_method;
+    opts.interaction = final_method == EstimationMethod::FoceI;
+    opts.methods = if chain.len() > 1 { chain } else { Vec::new() };
     opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
@@ -112,14 +153,47 @@ fn ferx_rust_fit(
         }
     }
 
+    // Install a cancellation token so Ctrl-C on the R console aborts the fit.
+    let cancel = CancelFlag::new();
+    opts.cancel = Some(cancel.clone());
+
     // Build initial parameters (initial values now live in [parameters] block)
     let init_params = parsed.model.default_params.clone();
 
-    // Fit
-    let result = match ferx_nlme::fit(&parsed.model, &population, &init_params, &opts) {
-        Ok(r) => r,
-        Err(e) => {
+    // Run the fit on a worker thread and poll for R interrupts on the main
+    // thread. Scoped threads let us borrow `parsed.model` and `population`
+    // without cloning them. The worker exits cooperatively when `cancel` is
+    // set — there is a small (poll-interval bounded) tail where the worker
+    // drains its last iteration before returning Err("cancelled by user").
+    let result = std::thread::scope(|s| {
+        let handle = s.spawn(|| ferx_nlme::fit(&parsed.model, &population, &init_params, &opts));
+
+        while !handle.is_finished() {
+            if pending_interrupt() {
+                cancel.cancel();
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
+        }
+
+        handle.join()
+    });
+
+    let result = match result {
+        Ok(Ok(r)) => r,
+        Ok(Err(_)) if cancel.is_cancelled() => {
+            // Raise a proper R error so the user sees a clean condition
+            // instead of a silent empty-list return. A small one-time leak
+            // of the worker's locals is acceptable here — one R session's
+            // worth of cancelled fits won't add up to anything meaningful.
+            throw_r_error("ferx_fit: cancelled by user");
+        }
+        Ok(Err(e)) => {
             rprintln!("Fit error: {}", e);
+            return List::new(0);
+        }
+        Err(_) => {
+            rprintln!("Fit error: worker thread panicked");
             return List::new(0);
         }
     };
@@ -311,6 +385,28 @@ fn ferx_rust_predict_from_fit(
     data_frame!(ID = id, TIME = time, PRED = pred).into()
 }
 
+// -- Helper: parse a single R-side method token into EstimationMethod --
+
+fn parse_method(token: &str) -> std::result::Result<EstimationMethod, String> {
+    let m = token.trim().to_lowercase();
+    if m == "saem" {
+        Ok(EstimationMethod::Saem)
+    } else if m.contains("hybrid") {
+        Ok(EstimationMethod::FoceGnHybrid)
+    } else if m == "gn" || m.contains("gauss") {
+        Ok(EstimationMethod::FoceGn)
+    } else if m == "focei" || m == "foce-i" || m == "foce_i" || m.contains("interaction") {
+        Ok(EstimationMethod::FoceI)
+    } else if m == "foce" {
+        Ok(EstimationMethod::Foce)
+    } else {
+        Err(format!(
+            "Unknown estimation method '{}' — expected one of: foce, focei, saem, gn, gn_hybrid",
+            token.trim()
+        ))
+    }
+}
+
 // -- Helper: materialize ModelParameters from R-side theta/omega/sigma --
 
 fn params_from_fit(
@@ -422,23 +518,35 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
     // Warnings
     let warnings: Vec<String> = result.warnings.clone();
 
-    let method_label = match result.method {
-        EstimationMethod::Saem => "SAEM",
-        EstimationMethod::FoceI => "FOCEI",
-        EstimationMethod::Foce => "FOCE",
-        EstimationMethod::FoceGn => "FOCE-GN",
-        EstimationMethod::FoceGnHybrid => "FOCE-GN-Hybrid",
+    let method_label = result.method.label();
+    let method_chain: Vec<String> = result
+        .method_chain
+        .iter()
+        .map(|m| m.label().to_string())
+        .collect();
+
+    // SIR CIs flattened as [lo1, hi1, lo2, hi2, ...]; empty vector => not computed.
+    let flatten_ci = |ci: &Option<Vec<(f64, f64)>>| -> Vec<f64> {
+        ci.as_ref()
+            .map(|v| v.iter().flat_map(|(lo, hi)| [*lo, *hi]).collect())
+            .unwrap_or_default()
     };
+    let sir_ess: f64 = result.sir_ess.unwrap_or(f64::NAN);
+    let sir_ci_theta = flatten_ci(&result.sir_ci_theta);
+    let sir_ci_omega = flatten_ci(&result.sir_ci_omega);
+    let sir_ci_sigma = flatten_ci(&result.sir_ci_sigma);
 
     list!(
         converged = result.converged,
         method = method_label,
+        method_chain = method_chain,
         ofv = result.ofv,
         aic = result.aic,
         bic = result.bic,
         n_subjects = result.n_subjects as i32,
         n_obs = result.n_obs as i32,
         n_parameters = result.n_parameters as i32,
+        n_iterations = result.n_iterations as i32,
         theta = theta_values,
         theta_names = theta_names,
         omega = omega_flat,
@@ -448,7 +556,11 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         se_omega = se_omega,
         se_sigma = se_sigma,
         sdtab = sdtab,
-        warnings = warnings
+        warnings = warnings,
+        sir_ess = sir_ess,
+        sir_ci_theta = sir_ci_theta,
+        sir_ci_omega = sir_ci_omega,
+        sir_ci_sigma = sir_ci_sigma
     )
 }
 
