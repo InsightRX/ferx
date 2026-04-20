@@ -419,6 +419,17 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         .map(|m| m.label().to_string())
         .collect();
 
+    // SIR CIs flattened as [lo1, hi1, lo2, hi2, ...]; empty vector => not computed.
+    let flatten_ci = |ci: &Option<Vec<(f64, f64)>>| -> Vec<f64> {
+        ci.as_ref()
+            .map(|v| v.iter().flat_map(|(lo, hi)| [*lo, *hi]).collect())
+            .unwrap_or_default()
+    };
+    let sir_ess: f64 = result.sir_ess.unwrap_or(f64::NAN);
+    let sir_ci_theta = flatten_ci(&result.sir_ci_theta);
+    let sir_ci_omega = flatten_ci(&result.sir_ci_omega);
+    let sir_ci_sigma = flatten_ci(&result.sir_ci_sigma);
+
     list!(
         converged = result.converged,
         method = method_label,
@@ -429,6 +440,7 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         n_subjects = result.n_subjects as i32,
         n_obs = result.n_obs as i32,
         n_parameters = result.n_parameters as i32,
+        n_iterations = result.n_iterations as i32,
         theta = theta_values,
         theta_names = theta_names,
         omega = omega_flat,
@@ -438,7 +450,11 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         se_omega = se_omega,
         se_sigma = se_sigma,
         sdtab = sdtab,
-        warnings = warnings
+        warnings = warnings,
+        sir_ess = sir_ess,
+        sir_ci_theta = sir_ci_theta,
+        sir_ci_omega = sir_ci_omega,
+        sir_ci_sigma = sir_ci_sigma
     )
 }
 

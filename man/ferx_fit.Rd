@@ -19,9 +19,13 @@ ferx_fit(
 
 \item{data}{Path to a NONMEM-format CSV file (ID, TIME, DV, EVID, AMT, CMT, ...)}
 
-\item{method}{Estimation method. One of \code{"foce"}, \code{"focei"},
-\code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or \code{"gn_hybrid"}
-(Gauss-Newton followed by a FOCEI polish step).}
+\item{method}{Estimation method(s). Either a single string or a character
+vector of methods to run in sequence. Each stage is seeded with the
+previous stage's converged parameters, and only the final stage produces
+the reported covariance/diagnostics. Supported methods: \code{"foce"},
+\code{"focei"}, \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or
+\code{"gn_hybrid"} (Gauss-Newton followed by a FOCEI polish step).
+Example chain: \code{c("saem", "focei")}.}
 
 \item{maxiter}{Maximum number of outer optimization iterations}
 
@@ -39,6 +43,7 @@ on \code{CENS=1} rows); \code{"drop"} disables M3.}
 A list with components:
 \item{converged}{Logical; did the optimizer converge}
 \item{method}{Estimation method used}
+\item{n_iterations}{Number of outer iterations run}
 \item{ofv}{Objective function value (-2 log-likelihood)}
 \item{aic}{Akaike Information Criterion}
 \item{bic}{Bayesian Information Criterion}
@@ -50,6 +55,9 @@ A list with components:
 \item{se_sigma}{Standard errors for sigma}
 \item{sdtab}{Data frame with ID, TIME, DV, PRED, IPRED, CWRES, IWRES, ETA1..n}
 \item{warnings}{Character vector of warnings}
+\item{sir_ess}{SIR effective sample size (NULL if SIR not run)}
+\item{sir_ci_theta, sir_ci_omega, sir_ci_sigma}{SIR 95\\% CI matrices
+with columns \code{lower} and \code{upper} (NULL if SIR not run)}
 }
 \description{
 Fits a NLME model using FOCE or FOCEI estimation with a Rust backend
@@ -60,6 +68,10 @@ powered by automatic differentiation (Enzyme).
 result <- ferx_fit("warfarin.ferx", "warfarin.csv")
 result$theta
 head(result$sdtab)
+
+# Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
+result <- ferx_fit("warfarin.ferx", "warfarin.csv",
+                   method = c("saem", "focei"))
 
 # Likelihood-based BLOQ handling (M3):
 bloq <- ferx_example("warfarin_bloq")
