@@ -2,10 +2,11 @@
 
 # nolint start
 
-#' @docType package
-#' @usage NULL
-#' @useDynLib ferx, .registration = TRUE
-NULL
+# Note: the `@docType package` / `@useDynLib` preamble that rextendr < 0.4
+# emitted here has been removed — `@useDynLib` now lives in R/ferx-package.R
+# alongside the `"_PACKAGE"` sentinel. When regenerating this file with
+# rextendr >= 0.4, the preamble will not be re-emitted. With an older
+# rextendr it will be re-added; delete the block again (or upgrade rextendr).
 
 #' @export
 ferx_rust_fit <- function(model_path, data_path, method, maxiter, covariance, verbose, bloq_method) {
