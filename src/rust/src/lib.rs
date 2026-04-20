@@ -1,7 +1,48 @@
 use extendr_api::prelude::*;
+use ferx_nlme::cancel::CancelFlag;
 use ferx_nlme::types::*;
 use nalgebra::DMatrix;
 use std::path::Path;
+
+// ---------------------------------------------------------------------------
+//  R interrupt polling
+// ---------------------------------------------------------------------------
+//
+// When R is running long native code it cannot respond to Ctrl-C — R's SIGINT
+// handler only sets a flag that is checked on re-entry into R. To make our
+// fit cancellable we:
+//   1. Spawn the fit on a worker thread with a shared CancelFlag.
+//   2. Poll on the main (R) thread via `pending_interrupt()`, which wraps
+//      `R_CheckUserInterrupt` in `R_ToplevelExec` so the longjmp is contained
+//      (avoids UB from skipping Rust frames).
+//   3. When an interrupt is pending, flip the cancel flag and let the worker
+//      exit cooperatively; ferx_nlme::fit returns Err("cancelled by user").
+//
+// Declared here rather than pulling libR-sys to keep the dependency surface
+// small. These symbols are stable parts of R's public API (R.h / Rinterface.h).
+
+extern "C" {
+    fn R_CheckUserInterrupt();
+    fn R_ToplevelExec(
+        fun: extern "C" fn(*mut std::ffi::c_void),
+        data: *mut std::ffi::c_void,
+    ) -> std::ffi::c_int;
+}
+
+extern "C" fn check_interrupt_cb(_: *mut std::ffi::c_void) {
+    unsafe { R_CheckUserInterrupt() };
+}
+
+/// Returns true if an R interrupt (Ctrl-C) is pending. Safe to call repeatedly
+/// on the R main thread — does not longjmp because the check is wrapped in
+/// `R_ToplevelExec`.
+fn pending_interrupt() -> bool {
+    unsafe { R_ToplevelExec(check_interrupt_cb, std::ptr::null_mut()) == 0 }
+}
+
+/// Poll interval for the interrupt-check loop. 100ms keeps Ctrl-C responsive
+/// while adding negligible overhead to the worker.
+const POLL_MS: u64 = 100;
 
 /// Fit a NLME model to data.
 ///
@@ -80,14 +121,47 @@ fn ferx_rust_fit(
     // Mirror onto the compiled model so likelihood functions pick it up.
     parsed.model.bloq_method = opts.bloq_method;
 
+    // Install a cancellation token so Ctrl-C on the R console aborts the fit.
+    let cancel = CancelFlag::new();
+    opts.cancel = Some(cancel.clone());
+
     // Build initial parameters (initial values now live in [parameters] block)
     let init_params = parsed.model.default_params.clone();
 
-    // Fit
-    let result = match ferx_nlme::fit(&parsed.model, &population, &init_params, &opts) {
-        Ok(r) => r,
-        Err(e) => {
+    // Run the fit on a worker thread and poll for R interrupts on the main
+    // thread. Scoped threads let us borrow `parsed.model` and `population`
+    // without cloning them. The worker exits cooperatively when `cancel` is
+    // set — there is a small (poll-interval bounded) tail where the worker
+    // drains its last iteration before returning Err("cancelled by user").
+    let result = std::thread::scope(|s| {
+        let handle = s.spawn(|| ferx_nlme::fit(&parsed.model, &population, &init_params, &opts));
+
+        while !handle.is_finished() {
+            if pending_interrupt() {
+                cancel.cancel();
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
+        }
+
+        handle.join()
+    });
+
+    let result = match result {
+        Ok(Ok(r)) => r,
+        Ok(Err(_)) if cancel.is_cancelled() => {
+            // Raise a proper R error so the user sees a clean condition
+            // instead of a silent empty-list return. A small one-time leak
+            // of the worker's locals is acceptable here — one R session's
+            // worth of cancelled fits won't add up to anything meaningful.
+            throw_r_error("ferx_fit: cancelled by user");
+        }
+        Ok(Err(e)) => {
             rprintln!("Fit error: {}", e);
+            return List::new(0);
+        }
+        Err(_) => {
+            rprintln!("Fit error: worker thread panicked");
             return List::new(0);
         }
     };
