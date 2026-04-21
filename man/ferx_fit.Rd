@@ -11,7 +11,8 @@ ferx_fit(
   maxiter = 500L,
   covariance = TRUE,
   verbose = TRUE,
-  bloq_method = NULL
+  bloq_method = NULL,
+  threads = NULL
 )
 }
 \arguments{
@@ -38,6 +39,14 @@ quantification. \code{NULL} (default) keeps whatever the model file
 specified; \code{"m3"} enables Beal's M3 likelihood (requires a
 \code{CENS} column in the data, with \code{DV} carrying the LLOQ value
 on \code{CENS=1} rows); \code{"drop"} disables M3.}
+
+\item{threads}{Number of worker threads for the per-subject parallel loops
+in the Rust backend (inner EBE search, SAEM, SIR). \code{NULL} (default)
+leaves the backend's thread pool at its default of one worker per logical
+CPU. Pass an integer to cap the pool — useful on shared machines, in CI,
+or to avoid SMT-induced contention (try
+\code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
+so successive fits in the same R session can use different values.}
 }
 \value{
 A list with components:

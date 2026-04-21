@@ -55,6 +55,10 @@ const POLL_MS: u64 = 100;
 /// @param covariance Run covariance step (TRUE/FALSE)
 /// @param verbose Print progress (TRUE/FALSE)
 /// @param bloq_method BLOQ handling: "drop", "m3", or "" to use the model default
+/// @param threads Number of rayon worker threads for the per-subject parallel
+///   loops. Pass `0` (or any value `<= 0`) to leave rayon's global pool alone
+///   (one worker per logical CPU). Positive values run this fit inside a
+///   scoped local pool of that size.
 /// @return Named list with fit results
 /// @export
 #[extendr]
@@ -66,6 +70,7 @@ fn ferx_rust_fit(
     covariance: bool,
     verbose: bool,
     bloq_method: &str,
+    threads: i32,
 ) -> List {
     let mut parsed =
         match ferx_nlme::parser::model_parser::parse_full_model_file(Path::new(model_path)) {
@@ -104,6 +109,11 @@ fn ferx_rust_fit(
     opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
+    opts.threads = if threads > 0 {
+        Some(threads as usize)
+    } else {
+        None
+    };
 
     // Optional R-side override for BLOQ handling. Empty string → keep whatever
     // the model file specified.
