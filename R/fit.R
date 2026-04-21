@@ -20,6 +20,13 @@
 #'   specified; \code{"m3"} enables Beal's M3 likelihood (requires a
 #'   \code{CENS} column in the data, with \code{DV} carrying the LLOQ value
 #'   on \code{CENS=1} rows); \code{"drop"} disables M3.
+#' @param threads Number of worker threads for the per-subject parallel loops
+#'   in the Rust backend (inner EBE search, SAEM, SIR). \code{NULL} (default)
+#'   leaves the backend's thread pool at its default of one worker per logical
+#'   CPU. Pass an integer to cap the pool — useful on shared machines, in CI,
+#'   or to avoid SMT-induced contention (try
+#'   \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
+#'   so successive fits in the same R session can use different values.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -61,7 +68,8 @@ ferx_fit <- function(model, data,
                      maxiter = 500L,
                      covariance = TRUE,
                      verbose = TRUE,
-                     bloq_method = NULL) {
+                     bloq_method = NULL,
+                     threads = NULL) {
   stopifnot(file.exists(model), file.exists(data))
   if (!is.character(method) || length(method) == 0L) {
     stop("`method` must be a non-empty character vector")
@@ -82,6 +90,15 @@ ferx_fit <- function(model, data,
   } else {
     bloq_arg <- match.arg(tolower(bloq_method), c("drop", "m3"))
   }
+  if (is.null(threads)) {
+    threads_arg <- 0L
+  } else {
+    if (!is.numeric(threads) || length(threads) != 1L || !is.finite(threads) ||
+        threads != as.integer(threads) || threads < 0L) {
+      stop("`threads` must be NULL or a non-negative integer scalar")
+    }
+    threads_arg <- as.integer(threads)
+  }
 
   raw <- ferx_rust_fit(
     model_path = normalizePath(model),
@@ -90,7 +107,8 @@ ferx_fit <- function(model, data,
     maxiter = as.integer(maxiter),
     covariance = covariance,
     verbose = verbose,
-    bloq_method = bloq_arg
+    bloq_method = bloq_arg,
+    threads = threads_arg
   )
 
   if (length(raw) == 0) {
