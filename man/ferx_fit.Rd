@@ -16,6 +16,7 @@ ferx_fit(
   optimizer = "slsqp",
   inner_maxiter = 200L,
   inner_tol = 1e-06,
+  steihaug_max_iters = 50L,
   settings = NULL
 )
 }
@@ -70,6 +71,12 @@ converging.}
 optimizer. Default is \code{1e-6}. Looser values (e.g. \code{1e-4})
 speed up each outer iteration; tighter values improve accuracy.}
 
+\item{steihaug_max_iters}{Maximum conjugate-gradient iterations for the
+Steihaug subproblem solver, used only when \code{optimizer = "trust_region"}.
+Default is \code{50}, which covers most population PK models (1- and
+2-compartment with covariates). Increase for complex models with more than
+50 parameters; the theoretical maximum needed is \code{n_params}.}
+
 \item{settings}{Optional named list of estimation-method-specific options
 forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 not have a dedicated \code{ferx_fit()} argument, without needing a new
@@ -120,6 +127,10 @@ fit_bobyqa <- ferx_fit(ex$model, ex$data, optimizer = "bobyqa")
 
 # Second-order trust region
 fit_tr <- ferx_fit(ex$model, ex$data, optimizer = "trust_region")
+
+# Trust region with more CG iterations for a complex model (25+ parameters)
+fit_tr2 <- ferx_fit(ex$model, ex$data, optimizer = "trust_region",
+                    steihaug_max_iters = 100L)
 
 # Fine-tune inner loop speed
 fit_fast <- ferx_fit(ex$model, ex$data,

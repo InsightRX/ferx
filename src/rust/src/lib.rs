@@ -62,6 +62,7 @@ const POLL_MS: u64 = 100;
 /// @param optimizer Outer optimizer: "slsqp", "lbfgs", "mma", "bobyqa", or "trust_region"
 /// @param inner_maxiter Maximum inner (individual) optimizer iterations
 /// @param inner_tol Convergence tolerance for the inner optimizer
+/// @param steihaug_max_iters Maximum CG iterations for Steihaug subproblem (trust_region only)
 /// @param settings_keys Parallel vector of setting names (pre-stringified).
 ///   Used together with `settings_values` to pass generic estimation-method
 ///   options (e.g. `n_exploration`, `sir_samples`) without needing a new
@@ -86,6 +87,7 @@ fn ferx_rust_fit(
     optimizer: &str,
     inner_maxiter: i32,
     inner_tol: f64,
+    steihaug_max_iters: i32,
     settings_keys: Vec<String>,
     settings_values: Vec<String>,
 ) -> List {
@@ -177,6 +179,7 @@ fn ferx_rust_fit(
     // Inner optimizer settings
     opts.inner_maxiter = inner_maxiter as usize;
     opts.inner_tol = inner_tol;
+    opts.steihaug_max_iters = steihaug_max_iters as usize;
     opts.threads = if threads > 0 {
         Some(threads as usize)
     } else {
