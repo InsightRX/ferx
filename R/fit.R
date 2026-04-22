@@ -30,7 +30,12 @@
 #' @param mu_referencing Logical. If \code{TRUE} (default), automatically
 #'   detects mu-referencing from the model structure for faster and more
 #'   accurate convergence. Applies to all estimation methods. Set to
-#'   \code{FALSE} to disable for comparison purposes.
+#'   \code{FALSE} to disable for comparison purposes. Detection works
+#'   automatically for standard parameterizations such as
+#'   \code{PARAM = THETA * exp(ETA)}; unusual parameterizations fall back
+#'   silently to zero-centred ETA initialisation with no error. No changes
+#'   to the \code{.ferx} model file are needed. Check \code{fit$warnings}
+#'   to see which ETAs were detected.
 #' @param settings Optional named list of estimation-method-specific options
 #'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 #'   not have a dedicated \code{ferx_fit()} argument, without needing a new
