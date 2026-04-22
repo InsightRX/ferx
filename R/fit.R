@@ -27,6 +27,20 @@
 #'   or to avoid SMT-induced contention (try
 #'   \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 #'   so successive fits in the same R session can use different values.
+#' @param settings Optional named list of estimation-method-specific options
+#'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
+#'   not have a dedicated \code{ferx_fit()} argument, without needing a new
+#'   wrapper release for each option. Recognized keys include SAEM
+#'   (\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
+#'   \code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
+#'   \code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
+#'   and optimizer selection (\code{optimizer}, \code{global_search},
+#'   \code{global_maxeval}). Values that duplicate a dedicated argument
+#'   (\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
+#'   \code{bloq_method}, \code{threads}) are rejected — pass them via the
+#'   dedicated argument. Unknown keys and malformed values also raise an
+#'   error. Settings apply on top of the model file's \code{[fit_options]}
+#'   block.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -60,6 +74,13 @@
 #' # Likelihood-based BLOQ handling (M3):
 #' bloq <- ferx_example("warfarin_bloq")
 #' result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
+#'
+#' # Tune SAEM phase lengths via `settings`:
+#' result <- ferx_fit("warfarin.ferx", "warfarin.csv",
+#'                    method  = "saem",
+#'                    settings = list(n_exploration = 200,
+#'                                    n_convergence = 400,
+#'                                    seed = 42L))
 #' }
 #'
 #' @export
@@ -69,7 +90,8 @@ ferx_fit <- function(model, data,
                      covariance = TRUE,
                      verbose = TRUE,
                      bloq_method = NULL,
-                     threads = NULL) {
+                     threads = NULL,
+                     settings = NULL) {
   stopifnot(file.exists(model), file.exists(data))
   if (!is.character(method) || length(method) == 0L) {
     stop("`method` must be a non-empty character vector")
@@ -100,6 +122,8 @@ ferx_fit <- function(model, data,
     threads_arg <- as.integer(threads)
   }
 
+  settings_parts <- .ferx_settings_to_strings(settings)
+
   raw <- ferx_rust_fit(
     model_path = normalizePath(model),
     data_path = normalizePath(data),
@@ -108,7 +132,9 @@ ferx_fit <- function(model, data,
     covariance = covariance,
     verbose = verbose,
     bloq_method = bloq_arg,
-    threads = threads_arg
+    threads = threads_arg,
+    settings_keys = settings_parts$keys,
+    settings_values = settings_parts$values
   )
 
   if (length(raw) == 0) {
@@ -280,4 +306,45 @@ print.ferx_fit <- function(x, ...) {
 
   cat(bar, "\n", sep = "")
   invisible(x)
+}
+
+# Convert a named-list of settings into two parallel character vectors for the
+# Rust FFI. Each value is stringified in a Rust-parser-friendly form (logicals
+# → "true"/"false", numerics with full precision, NULL/NA → "null"). Strict
+# validation happens in Rust (apply_fit_option); here we only enforce shape.
+.ferx_settings_to_strings <- function(settings) {
+  if (is.null(settings)) {
+    return(list(keys = character(0), values = character(0)))
+  }
+  if (!is.list(settings)) {
+    stop("`settings` must be NULL or a named list")
+  }
+  if (length(settings) == 0L) {
+    return(list(keys = character(0), values = character(0)))
+  }
+  nms <- names(settings)
+  if (is.null(nms) || any(!nzchar(nms)) || anyDuplicated(nms) != 0L) {
+    stop("`settings` must be a uniquely-named list (all entries must have a non-empty name)")
+  }
+  stringify <- function(key, v) {
+    if (is.null(v) || (length(v) == 1L && is.na(v))) return("null")
+    if (length(v) != 1L) {
+      stop(sprintf("`settings$%s` must be a length-1 scalar", key))
+    }
+    if (is.logical(v)) return(if (isTRUE(v)) "true" else "false")
+    if (is.numeric(v)) {
+      if (!is.finite(v)) {
+        stop(sprintf("`settings$%s` must be a finite number", key))
+      }
+      return(format(v, scientific = FALSE, trim = TRUE, digits = 17))
+    }
+    if (is.character(v)) return(v)
+    stop(sprintf("`settings$%s` has unsupported type `%s`", key, class(v)[1L]))
+  }
+  values <- vapply(
+    seq_along(settings),
+    function(i) stringify(nms[i], settings[[i]]),
+    character(1L)
+  )
+  list(keys = nms, values = values)
 }
