@@ -27,6 +27,10 @@
 #'   or to avoid SMT-induced contention (try
 #'   \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 #'   so successive fits in the same R session can use different values.
+#' @param mu_referencing Logical. If \code{TRUE} (default), automatically
+#'   detects mu-referencing from the model structure for faster and more
+#'   accurate convergence. Applies to all estimation methods. Set to
+#'   \code{FALSE} to disable for comparison purposes.
 #' @param settings Optional named list of estimation-method-specific options
 #'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 #'   not have a dedicated \code{ferx_fit()} argument, without needing a new
@@ -71,6 +75,12 @@
 #' result <- ferx_fit("warfarin.ferx", "warfarin.csv",
 #'                    method = c("saem", "focei"))
 #'
+#' # Compare with mu-referencing off
+#' fit_no_mu <- ferx_fit("warfarin.ferx", "warfarin.csv", mu_referencing = FALSE)
+#'
+#' # Check which ETAs were detected
+#' result$warnings
+#'
 #' # Likelihood-based BLOQ handling (M3):
 #' bloq <- ferx_example("warfarin_bloq")
 #' result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
@@ -91,8 +101,12 @@ ferx_fit <- function(model, data,
                      verbose = TRUE,
                      bloq_method = NULL,
                      threads = NULL,
+                     mu_referencing = TRUE,
                      settings = NULL) {
   stopifnot(file.exists(model), file.exists(data))
+  if (!is.logical(mu_referencing) || length(mu_referencing) != 1L || is.na(mu_referencing)) {
+    stop("`mu_referencing` must be TRUE or FALSE")
+  }
   if (!is.character(method) || length(method) == 0L) {
     stop("`method` must be a non-empty character vector")
   }
@@ -133,6 +147,7 @@ ferx_fit <- function(model, data,
     verbose = verbose,
     bloq_method = bloq_arg,
     threads = threads_arg,
+    mu_referencing = mu_referencing,
     settings_keys = settings_parts$keys,
     settings_values = settings_parts$values
   )
@@ -183,6 +198,13 @@ ferx_fit <- function(model, data,
   # Clean up internal fields
   result$theta_names <- NULL
   result$omega_dim <- NULL
+
+  # Print mu-referencing detections as informational messages
+  mu_ref_warnings <- grep("mu-ref", result$warnings, value = TRUE)
+  for (w in mu_ref_warnings) {
+    eta_names <- sub("^mu-ref:\\s*", "", w)
+    message("Mu-referencing detected for: ", eta_names)
+  }
 
   class(result) <- "ferx_fit"
   result
