@@ -12,7 +12,8 @@ ferx_fit(
   covariance = TRUE,
   verbose = TRUE,
   bloq_method = NULL,
-  threads = NULL
+  threads = NULL,
+  settings = NULL
 )
 }
 \arguments{
@@ -47,6 +48,21 @@ CPU. Pass an integer to cap the pool — useful on shared machines, in CI,
 or to avoid SMT-induced contention (try
 \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 so successive fits in the same R session can use different values.}
+
+\item{settings}{Optional named list of estimation-method-specific options
+forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
+not have a dedicated \code{ferx_fit()} argument, without needing a new
+wrapper release for each option. Recognized keys include SAEM
+(\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
+\code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
+\code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
+and optimizer selection (\code{optimizer}, \code{global_search},
+\code{global_maxeval}). Values that duplicate a dedicated argument
+(\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
+\code{bloq_method}, \code{threads}) are rejected — pass them via the
+dedicated argument. Unknown keys and malformed values also raise an
+error. Settings apply on top of the model file's \code{[fit_options]}
+block.}
 }
 \value{
 A list with components:
@@ -85,6 +101,13 @@ result <- ferx_fit("warfarin.ferx", "warfarin.csv",
 # Likelihood-based BLOQ handling (M3):
 bloq <- ferx_example("warfarin_bloq")
 result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
+
+# Tune SAEM phase lengths via `settings`:
+result <- ferx_fit("warfarin.ferx", "warfarin.csv",
+                   method  = "saem",
+                   settings = list(n_exploration = 200,
+                                   n_convergence = 400,
+                                   seed = 42L))
 }
 
 }

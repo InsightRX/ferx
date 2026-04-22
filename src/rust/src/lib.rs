@@ -59,9 +59,19 @@ const POLL_MS: u64 = 100;
 ///   loops. Pass `0` (or any value `<= 0`) to leave rayon's global pool alone
 ///   (one worker per logical CPU). Positive values run this fit inside a
 ///   scoped local pool of that size.
+/// @param settings_keys Parallel vector of setting names (pre-stringified).
+///   Used together with `settings_values` to pass generic estimation-method
+///   options (e.g. `n_exploration`, `sir_samples`) without needing a new
+///   R-Rust argument per option. Keys that duplicate a dedicated argument
+///   (`method`, `maxiter`, `covariance`, `verbose`, `bloq_method`, `threads`)
+///   are rejected so there is a single source of truth. Unknown keys and
+///   malformed values also raise an error.
+/// @param settings_values Parallel vector of setting values as strings;
+///   the Rust side parses each value according to the key's expected type.
 /// @return Named list with fit results
 /// @export
 #[extendr]
+#[allow(clippy::too_many_arguments)]
 fn ferx_rust_fit(
     model_path: &str,
     data_path: &str,
@@ -71,6 +81,8 @@ fn ferx_rust_fit(
     verbose: bool,
     bloq_method: &str,
     threads: i32,
+    settings_keys: Vec<String>,
+    settings_values: Vec<String>,
 ) -> List {
     let mut parsed =
         match ferx_nlme::parser::model_parser::parse_full_model_file(Path::new(model_path)) {
@@ -91,6 +103,53 @@ fn ferx_rust_fit(
 
     // Build fit options
     let mut opts = parsed.fit_options.clone();
+
+    // Apply generic `settings` list before the dedicated args below — the
+    // dedicated args are the single source of truth for their keys and always
+    // win. Reserved keys (those with a dedicated R argument) are rejected so
+    // the precedence rule is explicit rather than silently clobbered.
+    if settings_keys.len() != settings_values.len() {
+        rprintln!(
+            "Error: settings keys/values length mismatch ({} vs {})",
+            settings_keys.len(),
+            settings_values.len()
+        );
+        return List::new(0);
+    }
+    const RESERVED: &[&str] = &[
+        "method",
+        "maxiter",
+        "covariance",
+        "verbose",
+        "bloq_method",
+        "bloq",
+        "threads",
+    ];
+    for (k, v) in settings_keys.iter().zip(settings_values.iter()) {
+        let key = k.trim();
+        if RESERVED
+            .iter()
+            .any(|r| r.eq_ignore_ascii_case(key))
+        {
+            rprintln!(
+                "Error: setting `{}` conflicts with a dedicated ferx_fit() argument — pass it via that argument instead",
+                key
+            );
+            return List::new(0);
+        }
+        match ferx_nlme::parser::model_parser::apply_fit_option(&mut opts, key, v) {
+            Ok(true) => {}
+            Ok(false) => {
+                rprintln!("Error: unknown fit setting `{}`", key);
+                return List::new(0);
+            }
+            Err(e) => {
+                rprintln!("Error: {}", e);
+                return List::new(0);
+            }
+        }
+    }
+
     if method.is_empty() {
         rprintln!("Error: `method` must contain at least one estimation method");
         return List::new(0);
