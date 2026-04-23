@@ -43,9 +43,9 @@
 #'   (\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
 #'   \code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
 #'   \code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
-#'   optimizer selection (\code{optimizer} — one of \code{"slsqp"} (default),
-#'   \code{"lbfgs"}, \code{"nlopt_lbfgs"}, \code{"mma"}, \code{"bfgs"},
-#'   \code{"bobyqa"}, \code{"trust_region"}; also \code{global_search},
+#'   optimizer selection (\code{optimizer} — one of \code{"bobyqa"} (default),
+#'   \code{"slsqp"}, \code{"lbfgs"}, \code{"nlopt_lbfgs"}, \code{"mma"},
+#'   \code{"bfgs"}, \code{"trust_region"}; also \code{global_search},
 #'   \code{global_maxeval}), the inner (per-subject EBE) loop
 #'   (\code{inner_maxiter}, \code{inner_tol}), and the Steihaug CG budget
 #'   for \code{optimizer = "trust_region"} (\code{steihaug_max_iters}).
@@ -79,12 +79,12 @@
 #' \dontrun{
 #' ex <- ferx_example("warfarin")
 #'
-#' # Default SLSQP optimizer
+#' # Default: derivative-free BOBYQA — robust on the FOCE surface
 #' fit <- ferx_fit(ex$model, ex$data)
 #'
-#' # Derivative-free BOBYQA — more robust on difficult surfaces
-#' fit_bobyqa <- ferx_fit(ex$model, ex$data,
-#'                        settings = list(optimizer = "bobyqa"))
+#' # Gradient-based SLSQP — faster on smooth, well-behaved problems
+#' fit_slsqp <- ferx_fit(ex$model, ex$data,
+#'                       settings = list(optimizer = "slsqp"))
 #'
 #' # Second-order trust region with a tuned CG budget
 #' fit_tr <- ferx_fit(ex$model, ex$data,
@@ -93,8 +93,7 @@
 #'
 #' # Fine-tune inner (per-subject EBE) loop via `settings`
 #' fit_fast <- ferx_fit(ex$model, ex$data,
-#'                      settings = list(optimizer     = "bobyqa",
-#'                                      inner_maxiter = 100L,
+#'                      settings = list(inner_maxiter = 100L,
 #'                                      inner_tol     = 1e-6))
 #'
 #' # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
