@@ -27,28 +27,6 @@
 #'   or to avoid SMT-induced contention (try
 #'   \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 #'   so successive fits in the same R session can use different values.
-<<<<<<< HEAD
-#' @param optimizer Outer optimizer used during estimation. One of
-#'   \code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
-#'   \code{"bobyqa"}, or \code{"trust_region"}. \code{"slsqp"} and
-#'   \code{"lbfgs"} use gradient information from Enzyme autodiff and are
-#'   fastest on smooth surfaces. \code{"bobyqa"} is derivative-free and more
-#'   robust on discontinuous or noisy objectives. \code{"trust_region"} uses a
-#'   second-order trust-region method. \code{"mma"} is a gradient-based
-#'   method-of-moving-asymptotes approach.
-#' @param inner_maxiter Maximum number of inner (individual) optimization
-#'   iterations per outer step. Default is \code{200}. Reduce for speed at the
-#'   cost of inner convergence accuracy; increase if individual fits are not
-#'   converging.
-#' @param inner_tol Convergence tolerance for the inner (individual)
-#'   optimizer. Default is \code{1e-6}. Looser values (e.g. \code{1e-4})
-#'   speed up each outer iteration; tighter values improve accuracy.
-#' @param steihaug_max_iters Maximum conjugate-gradient iterations for the
-#'   Steihaug subproblem solver, used only when \code{optimizer = "trust_region"}.
-#'   Default is \code{50}, which covers most population PK models (1- and
-#'   2-compartment with covariates). Increase for complex models with more than
-#'   50 parameters; the theoretical maximum needed is \code{n_params}.
-=======
 #' @param mu_referencing Logical. If \code{TRUE} (default), automatically
 #'   detects mu-referencing from the model structure for faster and more
 #'   accurate convergence. Applies to all estimation methods. Set to
@@ -58,20 +36,25 @@
 #'   silently to zero-centred ETA initialisation with no error. No changes
 #'   to the \code{.ferx} model file are needed. Check \code{fit$warnings}
 #'   to see which ETAs were detected.
->>>>>>> main
 #' @param settings Optional named list of estimation-method-specific options
 #'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 #'   not have a dedicated \code{ferx_fit()} argument, without needing a new
 #'   wrapper release for each option. Recognized keys include SAEM
 #'   (\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
 #'   \code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
-#'   \code{sir_resamples}, \code{sir_seed}), and Gauss-Newton (\code{gn_lambda}).
+#'   \code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
+#'   optimizer selection (\code{optimizer} — one of \code{"slsqp"} (default),
+#'   \code{"lbfgs"}, \code{"nlopt_lbfgs"}, \code{"mma"}, \code{"bfgs"},
+#'   \code{"bobyqa"}, \code{"trust_region"}; also \code{global_search},
+#'   \code{global_maxeval}), the inner (per-subject EBE) loop
+#'   (\code{inner_maxiter}, \code{inner_tol}), and the Steihaug CG budget
+#'   for \code{optimizer = "trust_region"} (\code{steihaug_max_iters}).
 #'   Values that duplicate a dedicated argument
 #'   (\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
-#'   \code{bloq_method}, \code{threads}, \code{optimizer}) are rejected — pass
-#'   them via the dedicated argument. Unknown keys and malformed values also
-#'   raise an error. Settings apply on top of the model file's
-#'   \code{[fit_options]} block.
+#'   \code{bloq_method}, \code{threads}) are rejected — pass them via the
+#'   dedicated argument. Unknown keys and malformed values also raise an
+#'   error. Settings apply on top of the model file's \code{[fit_options]}
+#'   block.
 #'
 #' @return A list with components:
 #'   \item{converged}{Logical; did the optimizer converge}
@@ -100,20 +83,19 @@
 #' fit <- ferx_fit(ex$model, ex$data)
 #'
 #' # Derivative-free BOBYQA — more robust on difficult surfaces
-#' fit_bobyqa <- ferx_fit(ex$model, ex$data, optimizer = "bobyqa")
+#' fit_bobyqa <- ferx_fit(ex$model, ex$data,
+#'                        settings = list(optimizer = "bobyqa"))
 #'
-#' # Second-order trust region
-#' fit_tr <- ferx_fit(ex$model, ex$data, optimizer = "trust_region")
+#' # Second-order trust region with a tuned CG budget
+#' fit_tr <- ferx_fit(ex$model, ex$data,
+#'                    settings = list(optimizer          = "trust_region",
+#'                                    steihaug_max_iters = 100L))
 #'
-#' # Trust region with more CG iterations for a complex model (25+ parameters)
-#' fit_tr2 <- ferx_fit(ex$model, ex$data, optimizer = "trust_region",
-#'                     steihaug_max_iters = 100L)
-#'
-#' # Fine-tune inner loop speed
+#' # Fine-tune inner (per-subject EBE) loop via `settings`
 #' fit_fast <- ferx_fit(ex$model, ex$data,
-#'                      optimizer = "bobyqa",
-#'                      inner_maxiter = 100,
-#'                      inner_tol = 1e-6)
+#'                      settings = list(optimizer     = "bobyqa",
+#'                                      inner_maxiter = 100L,
+#'                                      inner_tol     = 1e-6))
 #'
 #' # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
 #' result <- ferx_fit("warfarin.ferx", "warfarin.csv",
@@ -145,14 +127,7 @@ ferx_fit <- function(model, data,
                      verbose = TRUE,
                      bloq_method = NULL,
                      threads = NULL,
-<<<<<<< HEAD
-                     optimizer = "slsqp",
-                     inner_maxiter = 200L,
-                     inner_tol = 1e-6,
-                     steihaug_max_iters = 50L,
-=======
                      mu_referencing = TRUE,
->>>>>>> main
                      settings = NULL) {
   stopifnot(file.exists(model), file.exists(data))
   if (!is.logical(mu_referencing) || length(mu_referencing) != 1L || is.na(mu_referencing)) {
@@ -186,10 +161,6 @@ ferx_fit <- function(model, data,
     }
     threads_arg <- as.integer(threads)
   }
-  optimizer <- match.arg(
-    tolower(optimizer),
-    c("slsqp", "lbfgs", "mma", "bobyqa", "trust_region")
-  )
 
   settings_parts <- .ferx_settings_to_strings(settings)
 
@@ -202,14 +173,7 @@ ferx_fit <- function(model, data,
     verbose = verbose,
     bloq_method = bloq_arg,
     threads = threads_arg,
-<<<<<<< HEAD
-    optimizer = optimizer,
-    inner_maxiter = as.integer(inner_maxiter),
-    inner_tol = as.double(inner_tol),
-    steihaug_max_iters = as.integer(steihaug_max_iters),
-=======
     mu_referencing = mu_referencing,
->>>>>>> main
     settings_keys = settings_parts$keys,
     settings_values = settings_parts$values
   )

@@ -59,17 +59,14 @@ const POLL_MS: u64 = 100;
 ///   loops. Pass `0` (or any value `<= 0`) to leave rayon's global pool alone
 ///   (one worker per logical CPU). Positive values run this fit inside a
 ///   scoped local pool of that size.
-/// @param optimizer Outer optimizer: "slsqp", "lbfgs", "mma", "bobyqa", or "trust_region"
-/// @param inner_maxiter Maximum inner (individual) optimizer iterations
-/// @param inner_tol Convergence tolerance for the inner optimizer
-/// @param steihaug_max_iters Maximum CG iterations for Steihaug subproblem (trust_region only)
 /// @param mu_referencing Use mu-referencing for ETA initialisation (TRUE/FALSE)
 /// @param settings_keys Parallel vector of setting names (pre-stringified).
 ///   Used together with `settings_values` to pass generic estimation-method
-///   options (e.g. `n_exploration`, `sir_samples`) without needing a new
-///   R-Rust argument per option. Keys that duplicate a dedicated argument
-///   are rejected so there is a single source of truth. Unknown keys and
-///   malformed values also raise an error.
+///   options (e.g. `n_exploration`, `sir_samples`, `optimizer`,
+///   `inner_maxiter`, `inner_tol`, `steihaug_max_iters`) without needing a
+///   new R-Rust argument per option. Keys that duplicate a dedicated
+///   argument are rejected so there is a single source of truth. Unknown
+///   keys and malformed values also raise an error.
 /// @param settings_values Parallel vector of setting values as strings;
 ///   the Rust side parses each value according to the key's expected type.
 /// @return Named list with fit results
@@ -121,6 +118,13 @@ fn ferx_rust_fit(
         );
         return List::new(0);
     }
+    // Reserved keys: these have dedicated ferx_fit() arguments. Keeping them
+    // out of `settings` means there is one source of truth per value.
+    // NOTE: `optimizer`, `inner_maxiter`, `inner_tol`, and
+    // `steihaug_max_iters` intentionally flow through `settings` — they
+    // were previously candidates for dedicated args but are fit-method
+    // tuning knobs that belong alongside `n_exploration`, `sir_samples`,
+    // etc.
     const RESERVED: &[&str] = &[
         "method",
         "maxiter",
@@ -129,7 +133,6 @@ fn ferx_rust_fit(
         "bloq_method",
         "bloq",
         "threads",
-        "optimizer",
     ];
     for (k, v) in settings_keys.iter().zip(settings_values.iter()) {
         let key = k.trim();
@@ -174,10 +177,6 @@ fn ferx_rust_fit(
     opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
-    // Inner optimizer settings
-    opts.inner_maxiter = inner_maxiter as usize;
-    opts.inner_tol = inner_tol;
-    opts.steihaug_max_iters = steihaug_max_iters as usize;
     opts.mu_referencing = mu_referencing;
     opts.threads = if threads > 0 {
         Some(threads as usize)
@@ -200,26 +199,6 @@ fn ferx_rust_fit(
     }
     // Mirror onto the compiled model so likelihood functions pick it up.
     parsed.model.bloq_method = opts.bloq_method;
-
-    // Inner optimizer settings
-    opts.inner_maxiter = inner_maxiter as usize;
-    opts.inner_tol = inner_tol;
-
-    // Outer optimizer override
-    match optimizer.trim().to_lowercase().as_str() {
-        "" | "slsqp" => opts.optimizer = Optimizer::Slsqp,
-        "lbfgs" => opts.optimizer = Optimizer::Lbfgs,
-        "mma" => opts.optimizer = Optimizer::Mma,
-        "bobyqa" => opts.optimizer = Optimizer::Bobyqa,
-        "trust_region" => opts.optimizer = Optimizer::TrustRegion,
-        other => {
-            rprintln!(
-                "Unknown optimizer '{}' — expected slsqp, lbfgs, mma, bobyqa, or trust_region (falling back to slsqp)",
-                other
-            );
-            opts.optimizer = Optimizer::Slsqp;
-        }
-    }
 
     // Install a cancellation token so Ctrl-C on the R console aborts the fit.
     let cancel = CancelFlag::new();
