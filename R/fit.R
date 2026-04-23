@@ -12,7 +12,6 @@
 #'   \code{"focei"}, \code{"saem"}, \code{"gn"} (Gauss-Newton / BHHH), or
 #'   \code{"gn_hybrid"} (Gauss-Newton followed by a FOCEI polish step).
 #'   Example chain: \code{c("saem", "focei")}.
-#' @param maxiter Maximum number of outer optimization iterations
 #' @param covariance Logical; compute the covariance step for standard errors
 #' @param verbose Logical; print progress during estimation
 #' @param bloq_method Handling of observations below the lower limit of
@@ -46,11 +45,12 @@
 #'   optimizer selection (\code{optimizer} — one of \code{"bobyqa"} (default),
 #'   \code{"slsqp"}, \code{"lbfgs"}, \code{"nlopt_lbfgs"}, \code{"mma"},
 #'   \code{"bfgs"}, \code{"trust_region"}; also \code{global_search},
-#'   \code{global_maxeval}), the inner (per-subject EBE) loop
+#'   \code{global_maxeval}), the outer optimizer iteration cap
+#'   (\code{maxiter}), the inner (per-subject EBE) loop
 #'   (\code{inner_maxiter}, \code{inner_tol}), and the Steihaug CG budget
 #'   for \code{optimizer = "trust_region"} (\code{steihaug_max_iters}).
 #'   Values that duplicate a dedicated argument
-#'   (\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
+#'   (\code{method}, \code{covariance}, \code{verbose},
 #'   \code{bloq_method}, \code{threads}) are rejected — pass them via the
 #'   dedicated argument. Unknown keys and malformed values also raise an
 #'   error. Settings apply on top of the model file's \code{[fit_options]}
@@ -121,7 +121,6 @@
 #' @export
 ferx_fit <- function(model, data,
                      method = "foce",
-                     maxiter = 500L,
                      covariance = TRUE,
                      verbose = TRUE,
                      bloq_method = NULL,
@@ -167,7 +166,6 @@ ferx_fit <- function(model, data,
     model_path = normalizePath(model),
     data_path = normalizePath(data),
     method = method,
-    maxiter = as.integer(maxiter),
     covariance = covariance,
     verbose = verbose,
     bloq_method = bloq_arg,
