@@ -33,4 +33,9 @@ ferx_rust_predict_from_fit <- function(model_path, data_path, theta, omega_flat,
   .Call("wrap__ferx_rust_predict_from_fit", model_path, data_path, theta, omega_flat, omega_dim, sigma)
 }
 
+#' @export
+ferx_rust_autodiff_enabled <- function() {
+  .Call("wrap__ferx_rust_autodiff_enabled")
+}
+
 # nolint end
