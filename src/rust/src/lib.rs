@@ -59,6 +59,9 @@ const POLL_MS: u64 = 100;
 ///   (one worker per logical CPU). Positive values run this fit inside a
 ///   scoped local pool of that size.
 /// @param mu_referencing Use mu-referencing for ETA initialisation (TRUE/FALSE)
+/// @param sir Run SIR uncertainty estimation as a post-fit step (TRUE/FALSE).
+///   Tuning knobs (`sir_samples`, `sir_resamples`, `sir_seed`) still flow
+///   through `settings`; only the on/off toggle is top-level.
 /// @param settings_keys Parallel vector of setting names (pre-stringified).
 ///   Used together with `settings_values` to pass generic estimation-method
 ///   options (e.g. `n_exploration`, `sir_samples`, `optimizer`,
@@ -81,6 +84,7 @@ fn ferx_rust_fit(
     bloq_method: &str,
     threads: i32,
     mu_referencing: bool,
+    sir: bool,
     settings_keys: Vec<String>,
     settings_values: Vec<String>,
 ) -> List {
@@ -130,6 +134,7 @@ fn ferx_rust_fit(
         "bloq_method",
         "bloq",
         "threads",
+        "sir",
     ];
     for (k, v) in settings_keys.iter().zip(settings_values.iter()) {
         let key = k.trim();
@@ -174,6 +179,7 @@ fn ferx_rust_fit(
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
     opts.mu_referencing = mu_referencing;
+    opts.sir = sir;
     opts.threads = if threads > 0 {
         Some(threads as usize)
     } else {
