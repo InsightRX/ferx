@@ -35,6 +35,13 @@
 #'   silently to zero-centred ETA initialisation with no error. No changes
 #'   to the \code{.ferx} model file are needed. Check \code{fit$warnings}
 #'   to see which ETAs were detected.
+#' @param gradient Inner-loop gradient method. One of \code{"auto"}
+#'   (default), \code{"ad"}, or \code{"fd"}. \code{"auto"} picks finite
+#'   differences for small-n_eta analytical PK models (where AD overhead
+#'   dominates) and automatic differentiation otherwise. \code{"ad"}
+#'   requires the package to have been compiled with autodiff support
+#'   (see \code{ferx_rust_autodiff_enabled()}); if unavailable, the fit
+#'   falls back to FD.
 #' @param sir Logical; run Sampling Importance Resampling after the fit to
 #'   produce non-parametric parameter uncertainty intervals. Requires
 #'   \code{covariance = TRUE}. Tuning knobs (\code{sir_samples},
@@ -132,7 +139,9 @@ ferx_fit <- function(model, data,
                      threads = NULL,
                      mu_referencing = TRUE,
                      sir = FALSE,
+                     gradient = c("auto", "ad", "fd"),
                      settings = NULL) {
+  gradient <- match.arg(gradient)
   stopifnot(file.exists(model), file.exists(data))
   if (!is.logical(covariance) || length(covariance) != 1L || is.na(covariance)) {
     stop("`covariance` must be TRUE or FALSE")
@@ -187,6 +196,7 @@ ferx_fit <- function(model, data,
     threads = threads_arg,
     mu_referencing = mu_referencing,
     sir = sir,
+    gradient = gradient,
     settings_keys = settings_parts$keys,
     settings_values = settings_parts$values
   )
