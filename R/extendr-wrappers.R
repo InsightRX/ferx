@@ -9,8 +9,8 @@
 # rextendr it will be re-added; delete the block again (or upgrade rextendr).
 
 #' @export
-ferx_rust_fit <- function(model_path, data_path, method, maxiter, covariance, verbose, bloq_method, threads, mu_referencing, sir, settings_keys, settings_values) {
-  .Call("wrap__ferx_rust_fit", model_path, data_path, as.character(method), maxiter, covariance, verbose, bloq_method, threads, mu_referencing, sir, as.character(settings_keys), as.character(settings_values))
+ferx_rust_fit <- function(model_path, data_path, method, covariance, verbose, bloq_method, threads, mu_referencing, sir, settings_keys, settings_values) {
+  .Call("wrap__ferx_rust_fit", model_path, data_path, as.character(method), covariance, verbose, bloq_method, threads, mu_referencing, sir, as.character(settings_keys), as.character(settings_values))
 }
 
 #' @export

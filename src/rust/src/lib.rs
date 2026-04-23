@@ -51,7 +51,6 @@ const POLL_MS: u64 = 100;
 /// @param method Character vector of estimation methods. A single element runs
 ///   one stage (e.g. "focei"); multiple elements chain stages, each seeded with
 ///   the previous stage's converged parameters (e.g. c("saem", "focei")).
-/// @param maxiter Maximum outer iterations
 /// @param covariance Run covariance step (TRUE/FALSE)
 /// @param verbose Print progress (TRUE/FALSE)
 /// @param bloq_method BLOQ handling: "drop", "m3", or "" to use the model default
@@ -80,7 +79,6 @@ fn ferx_rust_fit(
     model_path: &str,
     data_path: &str,
     method: Vec<String>,
-    maxiter: i32,
     covariance: bool,
     verbose: bool,
     bloq_method: &str,
@@ -131,7 +129,6 @@ fn ferx_rust_fit(
     // etc.
     const RESERVED: &[&str] = &[
         "method",
-        "maxiter",
         "covariance",
         "verbose",
         "bloq_method",
@@ -179,7 +176,6 @@ fn ferx_rust_fit(
     opts.method = final_method;
     opts.interaction = final_method == EstimationMethod::FoceI;
     opts.methods = if chain.len() > 1 { chain } else { Vec::new() };
-    opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
     opts.mu_referencing = mu_referencing;
