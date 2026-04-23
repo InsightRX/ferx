@@ -134,11 +134,17 @@ ferx_fit <- function(model, data,
                      sir = FALSE,
                      settings = NULL) {
   stopifnot(file.exists(model), file.exists(data))
+  if (!is.logical(covariance) || length(covariance) != 1L || is.na(covariance)) {
+    stop("`covariance` must be TRUE or FALSE")
+  }
   if (!is.logical(mu_referencing) || length(mu_referencing) != 1L || is.na(mu_referencing)) {
     stop("`mu_referencing` must be TRUE or FALSE")
   }
   if (!is.logical(sir) || length(sir) != 1L || is.na(sir)) {
     stop("`sir` must be TRUE or FALSE")
+  }
+  if (sir && !covariance) {
+    stop("`sir = TRUE` requires `covariance = TRUE`")
   }
   if (!is.character(method) || length(method) == 0L) {
     stop("`method` must be a non-empty character vector")
