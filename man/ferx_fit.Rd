@@ -13,6 +13,7 @@ ferx_fit(
   verbose = TRUE,
   bloq_method = NULL,
   threads = NULL,
+  mu_referencing = TRUE,
   settings = NULL
 )
 }
@@ -48,6 +49,16 @@ CPU. Pass an integer to cap the pool — useful on shared machines, in CI,
 or to avoid SMT-induced contention (try
 \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 so successive fits in the same R session can use different values.}
+
+\item{mu_referencing}{Logical. If \code{TRUE} (default), automatically
+detects mu-referencing from the model structure for faster and more
+accurate convergence. Applies to all estimation methods. Set to
+\code{FALSE} to disable for comparison purposes. Detection works
+automatically for standard parameterizations such as
+\code{PARAM = THETA * exp(ETA)}; unusual parameterizations fall back
+silently to zero-centred ETA initialisation with no error. No changes
+to the \code{.ferx} model file are needed. Check \code{fit$warnings}
+to see which ETAs were detected.}
 
 \item{settings}{Optional named list of estimation-method-specific options
 forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
@@ -97,6 +108,12 @@ head(result$sdtab)
 # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
 result <- ferx_fit("warfarin.ferx", "warfarin.csv",
                    method = c("saem", "focei"))
+
+# Compare with mu-referencing off
+fit_no_mu <- ferx_fit("warfarin.ferx", "warfarin.csv", mu_referencing = FALSE)
+
+# Check which ETAs were detected
+result$warnings
 
 # Likelihood-based BLOQ handling (M3):
 bloq <- ferx_example("warfarin_bloq")

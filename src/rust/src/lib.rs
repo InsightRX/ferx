@@ -59,6 +59,7 @@ const POLL_MS: u64 = 100;
 ///   loops. Pass `0` (or any value `<= 0`) to leave rayon's global pool alone
 ///   (one worker per logical CPU). Positive values run this fit inside a
 ///   scoped local pool of that size.
+/// @param mu_referencing Use mu-referencing for ETA initialisation (TRUE/FALSE)
 /// @param settings_keys Parallel vector of setting names (pre-stringified).
 ///   Used together with `settings_values` to pass generic estimation-method
 ///   options (e.g. `n_exploration`, `sir_samples`) without needing a new
@@ -81,6 +82,7 @@ fn ferx_rust_fit(
     verbose: bool,
     bloq_method: &str,
     threads: i32,
+    mu_referencing: bool,
     settings_keys: Vec<String>,
     settings_values: Vec<String>,
 ) -> List {
@@ -168,6 +170,7 @@ fn ferx_rust_fit(
     opts.outer_maxiter = maxiter as usize;
     opts.run_covariance_step = covariance;
     opts.verbose = verbose;
+    opts.mu_referencing = mu_referencing;
     opts.threads = if threads > 0 {
         Some(threads as usize)
     } else {
