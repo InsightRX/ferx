@@ -3,8 +3,22 @@ LIBDIR = $(TARGET_DIR)/release
 STATLIB = $(LIBDIR)/libferx.a
 PKG_LIBS = -L$(LIBDIR) -lferx -lm -ldl -lpthread
 
-# Autodiff is enabled by default. Set FERX_NO_AUTODIFF=1 to build on stable
-# Rust without Enzyme (uses the `ci` feature in ferx-nlme).
+# Autodiff mode. If FERX_NO_AUTODIFF is not explicitly set, probe for the
+# `enzyme` rustup toolchain; if it's missing, silently fall back to the
+# stable-Rust path so an install on a machine without Enzyme still works.
+# Set FERX_NO_AUTODIFF=1 to force the stable path, or FERX_NO_AUTODIFF=0 to
+# force autodiff (and error out if enzyme isn't present).
+ifeq ($(origin FERX_NO_AUTODIFF), undefined)
+  # `grep -q` with `&& echo yes`: prints "yes" iff the enzyme toolchain is
+  # installed. Using -q (not -c) avoids the "grep returns 1 on no match"
+  # exit-code trap that would otherwise double-print output and break the
+  # ifeq comparison below.
+  HAVE_ENZYME := $(shell rustup toolchain list 2>/dev/null | grep -q '^enzyme' && echo yes)
+  ifneq ($(HAVE_ENZYME),yes)
+    FERX_NO_AUTODIFF := 1
+    AUTODIFF_FALLBACK := 1
+  endif
+endif
 CARGO_FEATURES =
 ifeq ($(FERX_NO_AUTODIFF),1)
   CARGO_FEATURES = --no-default-features --features ci
@@ -36,7 +50,11 @@ $(STATLIB):
 ifeq ($(FERX_NO_AUTODIFF),1)
 	@echo '[toolchain]' > rust/rust-toolchain.toml
 	@echo 'channel = "$(HOST_TOOLCHAIN_CHANNEL)"' >> rust/rust-toolchain.toml
+ifeq ($(AUTODIFF_FALLBACK),1)
+	@echo "ferx: enzyme toolchain not found — building WITHOUT autodiff (toolchain: $(HOST_TOOLCHAIN_CHANNEL)). Install the enzyme rust fork and rerun to enable AD."
+else
 	@echo "ferx: building WITHOUT autodiff (FERX_NO_AUTODIFF=1, toolchain: $(HOST_TOOLCHAIN_CHANNEL))"
+endif
 else
 	@echo 'rustflags = ["-Z", "autodiff=Enable"]' >> rust/.cargo/config.toml
 	@echo '[toolchain]' > rust/rust-toolchain.toml
