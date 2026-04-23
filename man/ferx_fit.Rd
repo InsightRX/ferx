@@ -14,6 +14,7 @@ ferx_fit(
   bloq_method = NULL,
   threads = NULL,
   mu_referencing = TRUE,
+  sir = FALSE,
   settings = NULL
 )
 }
@@ -60,12 +61,18 @@ silently to zero-centred ETA initialisation with no error. No changes
 to the \code{.ferx} model file are needed. Check \code{fit$warnings}
 to see which ETAs were detected.}
 
+\item{sir}{Logical; run Sampling Importance Resampling after the fit to
+produce non-parametric parameter uncertainty intervals. Requires
+\code{covariance = TRUE}. Tuning knobs (\code{sir_samples},
+\code{sir_resamples}, \code{sir_seed}) still flow through
+\code{settings}. Default \code{FALSE}.}
+
 \item{settings}{Optional named list of estimation-method-specific options
 forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 not have a dedicated \code{ferx_fit()} argument, without needing a new
 wrapper release for each option. Recognized keys include SAEM
 (\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
-\code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
+\code{adapt_interval}, \code{seed}), SIR tuning (\code{sir_samples},
 \code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
 optimizer selection (\code{optimizer} — one of \code{"bobyqa"} (default),
 \code{"slsqp"}, \code{"lbfgs"}, \code{"nlopt_lbfgs"}, \code{"mma"},
@@ -75,10 +82,10 @@ optimizer selection (\code{optimizer} — one of \code{"bobyqa"} (default),
 for \code{optimizer = "trust_region"} (\code{steihaug_max_iters}).
 Values that duplicate a dedicated argument
 (\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
-\code{bloq_method}, \code{threads}) are rejected — pass them via the
-dedicated argument. Unknown keys and malformed values also raise an
-error. Settings apply on top of the model file's \code{[fit_options]}
-block.}
+\code{bloq_method}, \code{threads}, \code{sir}) are rejected — pass
+them via the dedicated argument. Unknown keys and malformed values
+also raise an error. Settings apply on top of the model file's
+\code{[fit_options]} block.}
 }
 \value{
 A list with components:
