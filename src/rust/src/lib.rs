@@ -62,11 +62,11 @@ const POLL_MS: u64 = 100;
 /// @param mu_referencing Use mu-referencing for ETA initialisation (TRUE/FALSE)
 /// @param settings_keys Parallel vector of setting names (pre-stringified).
 ///   Used together with `settings_values` to pass generic estimation-method
-///   options (e.g. `n_exploration`, `sir_samples`) without needing a new
-///   R-Rust argument per option. Keys that duplicate a dedicated argument
-///   (`method`, `maxiter`, `covariance`, `verbose`, `bloq_method`, `threads`)
-///   are rejected so there is a single source of truth. Unknown keys and
-///   malformed values also raise an error.
+///   options (e.g. `n_exploration`, `sir_samples`, `optimizer`,
+///   `inner_maxiter`, `inner_tol`, `steihaug_max_iters`) without needing a
+///   new R-Rust argument per option. Keys that duplicate a dedicated
+///   argument are rejected so there is a single source of truth. Unknown
+///   keys and malformed values also raise an error.
 /// @param settings_values Parallel vector of setting values as strings;
 ///   the Rust side parses each value according to the key's expected type.
 /// @return Named list with fit results
@@ -118,6 +118,13 @@ fn ferx_rust_fit(
         );
         return List::new(0);
     }
+    // Reserved keys: these have dedicated ferx_fit() arguments. Keeping them
+    // out of `settings` means there is one source of truth per value.
+    // NOTE: `optimizer`, `inner_maxiter`, `inner_tol`, and
+    // `steihaug_max_iters` intentionally flow through `settings` — they
+    // were previously candidates for dedicated args but are fit-method
+    // tuning knobs that belong alongside `n_exploration`, `sir_samples`,
+    // etc.
     const RESERVED: &[&str] = &[
         "method",
         "maxiter",

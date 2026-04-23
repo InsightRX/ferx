@@ -67,8 +67,13 @@ wrapper release for each option. Recognized keys include SAEM
 (\code{n_exploration}, \code{n_convergence}, \code{n_mh_steps},
 \code{adapt_interval}, \code{seed}), SIR (\code{sir}, \code{sir_samples},
 \code{sir_resamples}, \code{sir_seed}), Gauss-Newton (\code{gn_lambda}),
-and optimizer selection (\code{optimizer}, \code{global_search},
-\code{global_maxeval}). Values that duplicate a dedicated argument
+optimizer selection (\code{optimizer} — one of \code{"slsqp"} (default),
+\code{"lbfgs"}, \code{"nlopt_lbfgs"}, \code{"mma"}, \code{"bfgs"},
+\code{"bobyqa"}, \code{"trust_region"}; also \code{global_search},
+\code{global_maxeval}), the inner (per-subject EBE) loop
+(\code{inner_maxiter}, \code{inner_tol}), and the Steihaug CG budget
+for \code{optimizer = "trust_region"} (\code{steihaug_max_iters}).
+Values that duplicate a dedicated argument
 (\code{method}, \code{maxiter}, \code{covariance}, \code{verbose},
 \code{bloq_method}, \code{threads}) are rejected — pass them via the
 dedicated argument. Unknown keys and malformed values also raise an
@@ -101,9 +106,25 @@ powered by automatic differentiation (Enzyme).
 }
 \examples{
 \dontrun{
-result <- ferx_fit("warfarin.ferx", "warfarin.csv")
-result$theta
-head(result$sdtab)
+ex <- ferx_example("warfarin")
+
+# Default SLSQP optimizer
+fit <- ferx_fit(ex$model, ex$data)
+
+# Derivative-free BOBYQA — more robust on difficult surfaces
+fit_bobyqa <- ferx_fit(ex$model, ex$data,
+                       settings = list(optimizer = "bobyqa"))
+
+# Second-order trust region with a tuned CG budget
+fit_tr <- ferx_fit(ex$model, ex$data,
+                   settings = list(optimizer          = "trust_region",
+                                   steihaug_max_iters = 100L))
+
+# Fine-tune inner (per-subject EBE) loop via `settings`
+fit_fast <- ferx_fit(ex$model, ex$data,
+                     settings = list(optimizer     = "bobyqa",
+                                     inner_maxiter = 100L,
+                                     inner_tol     = 1e-6))
 
 # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
 result <- ferx_fit("warfarin.ferx", "warfarin.csv",
