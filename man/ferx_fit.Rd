@@ -13,10 +13,14 @@ ferx_fit(
   verbose = TRUE,
   bloq_method = NULL,
   threads = NULL,
+<<<<<<< HEAD
   optimizer = "slsqp",
   inner_maxiter = 200L,
   inner_tol = 1e-06,
   steihaug_max_iters = 50L,
+=======
+  mu_referencing = TRUE,
+>>>>>>> main
   settings = NULL
 )
 }
@@ -53,6 +57,7 @@ or to avoid SMT-induced contention (try
 \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 so successive fits in the same R session can use different values.}
 
+<<<<<<< HEAD
 \item{optimizer}{Outer optimizer used during estimation. One of
 \code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
 \code{"bobyqa"}, or \code{"trust_region"}. \code{"slsqp"} and
@@ -76,6 +81,17 @@ Steihaug subproblem solver, used only when \code{optimizer = "trust_region"}.
 Default is \code{50}, which covers most population PK models (1- and
 2-compartment with covariates). Increase for complex models with more than
 50 parameters; the theoretical maximum needed is \code{n_params}.}
+=======
+\item{mu_referencing}{Logical. If \code{TRUE} (default), automatically
+detects mu-referencing from the model structure for faster and more
+accurate convergence. Applies to all estimation methods. Set to
+\code{FALSE} to disable for comparison purposes. Detection works
+automatically for standard parameterizations such as
+\code{PARAM = THETA * exp(ETA)}; unusual parameterizations fall back
+silently to zero-centred ETA initialisation with no error. No changes
+to the \code{.ferx} model file are needed. Check \code{fit$warnings}
+to see which ETAs were detected.}
+>>>>>>> main
 
 \item{settings}{Optional named list of estimation-method-specific options
 forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
@@ -141,6 +157,12 @@ fit_fast <- ferx_fit(ex$model, ex$data,
 # Chain SAEM to FOCEI (SAEM explores, FOCEI polishes):
 result <- ferx_fit("warfarin.ferx", "warfarin.csv",
                    method = c("saem", "focei"))
+
+# Compare with mu-referencing off
+fit_no_mu <- ferx_fit("warfarin.ferx", "warfarin.csv", mu_referencing = FALSE)
+
+# Check which ETAs were detected
+result$warnings
 
 # Likelihood-based BLOQ handling (M3):
 bloq <- ferx_example("warfarin_bloq")

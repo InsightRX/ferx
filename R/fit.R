@@ -27,6 +27,7 @@
 #'   or to avoid SMT-induced contention (try
 #'   \code{parallel::detectCores(logical = FALSE)}). The setting is per-call,
 #'   so successive fits in the same R session can use different values.
+<<<<<<< HEAD
 #' @param optimizer Outer optimizer used during estimation. One of
 #'   \code{"slsqp"} (default), \code{"lbfgs"}, \code{"mma"},
 #'   \code{"bobyqa"}, or \code{"trust_region"}. \code{"slsqp"} and
@@ -47,6 +48,17 @@
 #'   Default is \code{50}, which covers most population PK models (1- and
 #'   2-compartment with covariates). Increase for complex models with more than
 #'   50 parameters; the theoretical maximum needed is \code{n_params}.
+=======
+#' @param mu_referencing Logical. If \code{TRUE} (default), automatically
+#'   detects mu-referencing from the model structure for faster and more
+#'   accurate convergence. Applies to all estimation methods. Set to
+#'   \code{FALSE} to disable for comparison purposes. Detection works
+#'   automatically for standard parameterizations such as
+#'   \code{PARAM = THETA * exp(ETA)}; unusual parameterizations fall back
+#'   silently to zero-centred ETA initialisation with no error. No changes
+#'   to the \code{.ferx} model file are needed. Check \code{fit$warnings}
+#'   to see which ETAs were detected.
+>>>>>>> main
 #' @param settings Optional named list of estimation-method-specific options
 #'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 #'   not have a dedicated \code{ferx_fit()} argument, without needing a new
@@ -107,6 +119,12 @@
 #' result <- ferx_fit("warfarin.ferx", "warfarin.csv",
 #'                    method = c("saem", "focei"))
 #'
+#' # Compare with mu-referencing off
+#' fit_no_mu <- ferx_fit("warfarin.ferx", "warfarin.csv", mu_referencing = FALSE)
+#'
+#' # Check which ETAs were detected
+#' result$warnings
+#'
 #' # Likelihood-based BLOQ handling (M3):
 #' bloq <- ferx_example("warfarin_bloq")
 #' result <- ferx_fit(bloq$model, bloq$data, method = "focei", bloq_method = "m3")
@@ -127,12 +145,19 @@ ferx_fit <- function(model, data,
                      verbose = TRUE,
                      bloq_method = NULL,
                      threads = NULL,
+<<<<<<< HEAD
                      optimizer = "slsqp",
                      inner_maxiter = 200L,
                      inner_tol = 1e-6,
                      steihaug_max_iters = 50L,
+=======
+                     mu_referencing = TRUE,
+>>>>>>> main
                      settings = NULL) {
   stopifnot(file.exists(model), file.exists(data))
+  if (!is.logical(mu_referencing) || length(mu_referencing) != 1L || is.na(mu_referencing)) {
+    stop("`mu_referencing` must be TRUE or FALSE")
+  }
   if (!is.character(method) || length(method) == 0L) {
     stop("`method` must be a non-empty character vector")
   }
@@ -177,10 +202,14 @@ ferx_fit <- function(model, data,
     verbose = verbose,
     bloq_method = bloq_arg,
     threads = threads_arg,
+<<<<<<< HEAD
     optimizer = optimizer,
     inner_maxiter = as.integer(inner_maxiter),
     inner_tol = as.double(inner_tol),
     steihaug_max_iters = as.integer(steihaug_max_iters),
+=======
+    mu_referencing = mu_referencing,
+>>>>>>> main
     settings_keys = settings_parts$keys,
     settings_values = settings_parts$values
   )
@@ -231,6 +260,13 @@ ferx_fit <- function(model, data,
   # Clean up internal fields
   result$theta_names <- NULL
   result$omega_dim <- NULL
+
+  # Print mu-referencing detections as informational messages
+  mu_ref_warnings <- grep("mu-ref", result$warnings, value = TRUE)
+  for (w in mu_ref_warnings) {
+    eta_names <- sub("^mu-ref:\\s*", "", w)
+    message("Mu-referencing detected for: ", eta_names)
+  }
 
   class(result) <- "ferx_fit"
   result
