@@ -2,13 +2,69 @@ TARGET_DIR = ./rust/target
 LIBDIR = $(TARGET_DIR)/release
 STATLIB = $(LIBDIR)/libferx.a
 PKG_LIBS = -L$(LIBDIR) -lferx -lm -ldl -lpthread
+
+# Autodiff mode. If FERX_NO_AUTODIFF is not explicitly set, probe for the
+# `enzyme` rustup toolchain; if it's missing, silently fall back to the
+# stable-Rust path so an install on a machine without Enzyme still works.
+# Set FERX_NO_AUTODIFF=1 to force the stable path, or FERX_NO_AUTODIFF=0 to
+# force autodiff (and error out if enzyme isn't present).
+ifeq ($(origin FERX_NO_AUTODIFF), undefined)
+  # `grep -q` with `&& echo yes`: prints "yes" iff the enzyme toolchain is
+  # installed. Using -q (not -c) avoids the "grep returns 1 on no match"
+  # exit-code trap that would otherwise double-print output and break the
+  # ifeq comparison below.
+  HAVE_ENZYME := $(shell rustup toolchain list 2>/dev/null | grep -q '^enzyme' && echo yes)
+  ifneq ($(HAVE_ENZYME),yes)
+    FERX_NO_AUTODIFF := 1
+    AUTODIFF_FALLBACK := 1
+  endif
+endif
+CARGO_FEATURES =
+ifeq ($(FERX_NO_AUTODIFF),1)
+  CARGO_FEATURES = --no-default-features --features ci
+endif
+
+# Ensure cargo driver host arch matches R's arch (avoids mismatch when the
+# user's active rustup toolchain is x86_64 Rosetta but R is arm64).
+UNAME_M := $(shell uname -m)
+UNAME_S := $(shell uname -s)
+HOST_TOOLCHAIN_CHANNEL = stable
+ifeq ($(UNAME_S),Darwin)
+  ifeq ($(UNAME_M),arm64)
+    HOST_TOOLCHAIN_CHANNEL = stable-aarch64-apple-darwin
+  endif
+  ifeq ($(UNAME_M),x86_64)
+    HOST_TOOLCHAIN_CHANNEL = stable-x86_64-apple-darwin
+  endif
+endif
+
 all: C_clean
+
 $(SHLIB): $(STATLIB)
+
 $(STATLIB):
+	@# Ensure .cargo/config.toml and rust-toolchain.toml exist (R CMD INSTALL
+	@# strips hidden directories and these files are needed by cargo).
 	@mkdir -p rust/.cargo
 	@echo '[build]' > rust/.cargo/config.toml
-	cd rust && cargo build --release
+ifeq ($(FERX_NO_AUTODIFF),1)
+	@echo '[toolchain]' > rust/rust-toolchain.toml
+	@echo 'channel = "$(HOST_TOOLCHAIN_CHANNEL)"' >> rust/rust-toolchain.toml
+ifeq ($(AUTODIFF_FALLBACK),1)
+	@echo "ferx: enzyme toolchain not found — building WITHOUT autodiff (toolchain: $(HOST_TOOLCHAIN_CHANNEL)). Install the enzyme rust fork and rerun to enable AD."
+else
+	@echo "ferx: building WITHOUT autodiff (FERX_NO_AUTODIFF=1, toolchain: $(HOST_TOOLCHAIN_CHANNEL))"
+endif
+else
+	@echo 'rustflags = ["-Z", "autodiff=Enable"]' >> rust/.cargo/config.toml
+	@echo '[toolchain]' > rust/rust-toolchain.toml
+	@echo 'channel = "enzyme"' >> rust/rust-toolchain.toml
+	@echo "ferx: building WITH autodiff (Enzyme toolchain)"
+endif
+	cd rust && cargo build --release $(CARGO_FEATURES)
+
 C_clean:
 	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS)
+
 clean:
 	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) rust/target

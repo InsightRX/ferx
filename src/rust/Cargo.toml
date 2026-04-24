@@ -8,9 +8,14 @@ authors = ["InsightRX, Inc."]
 [lib]
 crate-type = ["staticlib"]
 
+[features]
+default = ["autodiff"]
+autodiff = ["ferx-nlme/autodiff"]
+ci = ["ferx-nlme/ci"]
+
 [dependencies]
 extendr-api = "0.7"
-ferx-nlme = { path = "../../../ferx-nlme", default-features = false, features = ["ci"] }
+ferx-nlme = { path = "../../../ferx-nlme", default-features = false }
 nalgebra = "0.33"
 
 [profile.release]

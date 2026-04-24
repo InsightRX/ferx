@@ -35,6 +35,47 @@
 #'   silently to zero-centred ETA initialisation with no error. No changes
 #'   to the \code{.ferx} model file are needed. Check \code{fit$warnings}
 #'   to see which ETAs were detected.
+#' @param gradient Inner-loop (per-subject EBE) gradient method.
+#'   One of \code{"auto"} (default), \code{"ad"}, or \code{"fd"}.
+#'
+#'   The inner optimizer is BFGS; what differs is how the gradient of the
+#'   individual NLL w.r.t. ETA is computed:
+#'   \itemize{
+#'     \item \code{"ad"}: reverse-mode automatic differentiation via
+#'       Enzyme. One forward + one reverse pass per gradient call,
+#'       regardless of the number of etas. Requires the package to have
+#'       been compiled with autodiff support (see
+#'       \code{ferx_rust_autodiff_enabled()}) and the model to have an
+#'       analytical PK path. ODE-based models currently have no AD
+#'       implementation and will silently fall back to FD even if
+#'       \code{"ad"} is requested.
+#'     \item \code{"fd"}: central finite differences, \code{2 * n_eta}
+#'       forward evaluations per gradient call. Always available.
+#'     \item \code{"auto"} (default): use AD whenever the package was
+#'       compiled with it and the model has an analytical PK path,
+#'       otherwise FD. This is the right choice for almost all uses.
+#'   }
+#'
+#'   \strong{When AD wins.} AD's per-gradient cost is roughly independent
+#'   of the number of etas, while FD scales linearly. For typical
+#'   analytical PK fits we have measured AD ~5x faster per gradient call
+#'   on 1-cpt oral (\code{n_eta = 3}) and ~1.5-1.8x faster per call on 2-
+#'   and 3-cpt infusion. The advantage grows with more random effects,
+#'   more observations per subject, and (when implemented) ODE forward
+#'   models. On small problems the \emph{wall-clock} gap is often small
+#'   because non-gradient work (NLopt steps, population likelihood
+#'   reductions, parallel scheduling) dominates the total fit time.
+#'
+#'   \strong{When to set \code{"fd"} explicitly.} Mainly for validation
+#'   (cross-check that AD and FD converge to the same OFV on a new model),
+#'   for reproducibility against a known FD baseline, or to sidestep an
+#'   Enzyme codegen pathology on an unusual model structure. Both methods
+#'   converge to the same optimum within line-search tolerance on
+#'   well-conditioned problems.
+#'
+#'   Set \code{FERX_TIME_GRADIENTS=1} in the environment to print
+#'   per-gradient-call timings at the end of a fit, which is the easiest
+#'   way to check which method is faster on your specific model/data.
 #' @param sir Logical; run Sampling Importance Resampling after the fit to
 #'   produce non-parametric parameter uncertainty intervals. Requires
 #'   \code{covariance = TRUE}. Tuning knobs (\code{sir_samples},
@@ -132,7 +173,9 @@ ferx_fit <- function(model, data,
                      threads = NULL,
                      mu_referencing = TRUE,
                      sir = FALSE,
+                     gradient = c("auto", "ad", "fd"),
                      settings = NULL) {
+  gradient <- match.arg(gradient)
   stopifnot(file.exists(model), file.exists(data))
   if (!is.logical(covariance) || length(covariance) != 1L || is.na(covariance)) {
     stop("`covariance` must be TRUE or FALSE")
@@ -187,6 +230,7 @@ ferx_fit <- function(model, data,
     threads = threads_arg,
     mu_referencing = mu_referencing,
     sir = sir,
+    gradient = gradient,
     settings_keys = settings_parts$keys,
     settings_values = settings_parts$values
   )

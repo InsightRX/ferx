@@ -85,6 +85,7 @@ fn ferx_rust_fit(
     threads: i32,
     mu_referencing: bool,
     sir: bool,
+    gradient: &str,
     settings_keys: Vec<String>,
     settings_values: Vec<String>,
 ) -> List {
@@ -135,6 +136,8 @@ fn ferx_rust_fit(
         "bloq",
         "threads",
         "sir",
+        "gradient",
+        "gradient_method",
     ];
     for (k, v) in settings_keys.iter().zip(settings_values.iter()) {
         let key = k.trim();
@@ -201,6 +204,23 @@ fn ferx_rust_fit(
     }
     // Mirror onto the compiled model so likelihood functions pick it up.
     parsed.model.bloq_method = opts.bloq_method;
+
+    // Gradient method override. Empty string → keep model/option default.
+    match gradient.trim().to_lowercase().as_str() {
+        "" | "auto" => opts.gradient_method = ferx_nlme::GradientMethod::Auto,
+        "ad" | "autodiff" => opts.gradient_method = ferx_nlme::GradientMethod::Ad,
+        "fd" | "finite" | "finite_difference" => {
+            opts.gradient_method = ferx_nlme::GradientMethod::Fd
+        }
+        other => {
+            rprintln!(
+                "Unknown gradient method '{}' — expected 'auto', 'ad', or 'fd' (falling back to auto)",
+                other
+            );
+            opts.gradient_method = ferx_nlme::GradientMethod::Auto;
+        }
+    }
+    parsed.model.gradient_method = opts.gradient_method;
 
     // Install a cancellation token so Ctrl-C on the R console aborts the fit.
     let cancel = CancelFlag::new();
@@ -512,11 +532,14 @@ fn params_from_fit(
         theta_names: template.theta_names.clone(),
         theta_lower: template.theta_lower.clone(),
         theta_upper: template.theta_upper.clone(),
+        theta_fixed: template.theta_fixed.clone(),
         omega,
+        omega_fixed: template.omega_fixed.clone(),
         sigma: SigmaVector {
             values: sigma.to_vec(),
             names: template.sigma.names.clone(),
         },
+        sigma_fixed: template.sigma_fixed.clone(),
     })
 }
 
@@ -634,6 +657,13 @@ fn sdtab_to_dataframe(cols: &[(String, Vec<f64>)]) -> Robj {
     df.into()
 }
 
+/// Returns TRUE if the Rust library was compiled with the `autodiff` feature
+/// (Enzyme toolchain), FALSE otherwise.
+#[extendr]
+fn ferx_rust_autodiff_enabled() -> bool {
+    cfg!(feature = "autodiff")
+}
+
 extendr_module! {
     mod ferx;
     fn ferx_rust_fit;
@@ -641,4 +671,5 @@ extendr_module! {
     fn ferx_rust_simulate_from_fit;
     fn ferx_rust_predict;
     fn ferx_rust_predict_from_fit;
+    fn ferx_rust_autodiff_enabled;
 }
