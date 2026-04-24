@@ -613,6 +613,12 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         None => ().into(),
     };
 
+    let covariance_status_str = match result.covariance_status {
+        CovarianceStatus::Computed => "computed",
+        CovarianceStatus::Failed => "failed",
+        CovarianceStatus::NotRequested => "not_requested",
+    };
+
     list!(
         converged = result.converged,
         method = method_label,
@@ -638,7 +644,16 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         sir_ci_theta = sir_ci_theta,
         sir_ci_omega = sir_ci_omega,
         sir_ci_sigma = sir_ci_sigma,
-        trace_path = trace_path
+        trace_path = trace_path,
+        ebe_convergence_warnings = result.ebe_convergence_warnings as i32,
+        max_unconverged_subjects = result.max_unconverged_subjects as i32,
+        total_ebe_fallbacks = result.total_ebe_fallbacks as i32,
+        covariance_status = covariance_status_str,
+        shrinkage_eta = result.shrinkage_eta.clone(),
+        shrinkage_eps = result.shrinkage_eps,
+        wall_time_secs = result.wall_time_secs,
+        model_name = result.model_name.clone(),
+        ferx_version = result.ferx_version.clone()
     )
 }
 
