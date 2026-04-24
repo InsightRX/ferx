@@ -81,6 +81,11 @@
 #'   \code{covariance = TRUE}. Tuning knobs (\code{sir_samples},
 #'   \code{sir_resamples}, \code{sir_seed}) still flow through
 #'   \code{settings}. Default \code{FALSE}.
+#' @param optimizer_trace Logical. If \code{TRUE}, write a per-iteration CSV
+#'   trace to a temporary file and store its path in \code{fit$trace_path}.
+#'   Pass the result to \code{\link{ferx_read_trace}} or
+#'   \code{\link{ferx_plot_trace}} to inspect optimizer progress. Default
+#'   \code{FALSE}.
 #' @param settings Optional named list of estimation-method-specific options
 #'   forwarded to the Rust \code{FitOptions}. Use this to tune knobs that do
 #'   not have a dedicated \code{ferx_fit()} argument, without needing a new
@@ -120,6 +125,15 @@
 #'   \item{sir_ess}{SIR effective sample size (NULL if SIR not run)}
 #'   \item{sir_ci_theta, sir_ci_omega, sir_ci_sigma}{SIR 95\% CI matrices
 #'     with columns \code{lower} and \code{upper} (NULL if SIR not run)}
+#'   \item{trace_path}{Path to the optimizer trace CSV, or \code{NULL} when
+#'     \code{optimizer_trace = FALSE}. Pass to \code{\link{ferx_read_trace}}
+#'     or \code{\link{ferx_plot_trace}}.}
+#'   \item{ebe_convergence_warnings}{Number of outer iterations in which too
+#'     many EBEs were unconverged (step was rejected by the guard).}
+#'   \item{max_unconverged_subjects}{Worst-case number of unconverged subjects
+#'     in a single outer iteration.}
+#'   \item{total_ebe_fallbacks}{Total Nelder-Mead fallback invocations across
+#'     all subjects and iterations.}
 #'
 #' @examples
 #' \dontrun{
@@ -174,6 +188,10 @@ ferx_fit <- function(model, data,
                      mu_referencing = TRUE,
                      sir = FALSE,
                      gradient = c("auto", "ad", "fd"),
+                     optimizer_trace = FALSE,
+                     scale_params = TRUE,
+                     max_unconverged_frac = NULL,
+                     min_obs_for_convergence_check = NULL,
                      settings = NULL) {
   gradient <- match.arg(gradient)
   stopifnot(file.exists(model), file.exists(data))
@@ -218,6 +236,42 @@ ferx_fit <- function(model, data,
     threads_arg <- as.integer(threads)
   }
 
+  if (!is.logical(optimizer_trace) || length(optimizer_trace) != 1L || is.na(optimizer_trace)) {
+    stop("`optimizer_trace` must be TRUE or FALSE")
+  }
+  if (!is.logical(scale_params) || length(scale_params) != 1L || is.na(scale_params)) {
+    stop("`scale_params` must be TRUE or FALSE")
+  }
+  # Merge optimizer_trace into settings so apply_fit_option handles it on the
+  # Rust side (it's already in framework_keys()).  User-supplied settings take
+  # precedence if somehow duplicated, which Rust will reject as a duplicate key
+  # — but we forbid that below via the RESERVED list.
+  if (isTRUE(optimizer_trace)) {
+    settings <- c(list(optimizer_trace = TRUE), settings)
+  }
+  # Only inject scale_params when FALSE — the Rust default is true, so omitting
+  # it preserves the behaviour callers expect when they don't pass the argument.
+  if (isFALSE(scale_params)) {
+    settings <- c(list(scale_params = FALSE), settings)
+  }
+  if (!is.null(max_unconverged_frac)) {
+    if (!is.numeric(max_unconverged_frac) || length(max_unconverged_frac) != 1L ||
+        !is.finite(max_unconverged_frac) || max_unconverged_frac < 0 || max_unconverged_frac > 1) {
+      stop("`max_unconverged_frac` must be a numeric scalar between 0 and 1")
+    }
+    settings <- c(list(max_unconverged_frac = max_unconverged_frac), settings)
+  }
+  if (!is.null(min_obs_for_convergence_check)) {
+    if (!is.numeric(min_obs_for_convergence_check) ||
+        length(min_obs_for_convergence_check) != 1L ||
+        !is.finite(min_obs_for_convergence_check) ||
+        min_obs_for_convergence_check != as.integer(min_obs_for_convergence_check) ||
+        min_obs_for_convergence_check < 0L) {
+      stop("`min_obs_for_convergence_check` must be a non-negative integer scalar")
+    }
+    settings <- c(list(min_obs_for_convergence_check = as.integer(min_obs_for_convergence_check)),
+                  settings)
+  }
   settings_parts <- .ferx_settings_to_strings(settings)
 
   raw <- ferx_rust_fit(
@@ -277,6 +331,12 @@ ferx_fit <- function(model, data,
   result$sir_ci_omega <- reshape_ci(result$sir_ci_omega, eta_names)
   sig_names <- paste0("SIGMA(", seq_along(result$sigma), ")")
   result$sir_ci_sigma <- reshape_ci(result$sir_ci_sigma, sig_names)
+
+  # Normalize trace_path: NULL/empty means no trace was written
+  tp <- result$trace_path
+  if (is.null(tp) || length(tp) == 0L || !nzchar(tp[[1L]])) {
+    result$trace_path <- NULL
+  }
 
   # Clean up internal fields
   result$theta_names <- NULL
