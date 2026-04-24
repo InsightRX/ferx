@@ -128,6 +128,12 @@
 #'   \item{trace_path}{Path to the optimizer trace CSV, or \code{NULL} when
 #'     \code{optimizer_trace = FALSE}. Pass to \code{\link{ferx_read_trace}}
 #'     or \code{\link{ferx_plot_trace}}.}
+#'   \item{ebe_convergence_warnings}{Number of outer iterations in which too
+#'     many EBEs were unconverged (step was rejected by the guard).}
+#'   \item{max_unconverged_subjects}{Worst-case number of unconverged subjects
+#'     in a single outer iteration.}
+#'   \item{total_ebe_fallbacks}{Total Nelder-Mead fallback invocations across
+#'     all subjects and iterations.}
 #'
 #' @examples
 #' \dontrun{
@@ -184,6 +190,8 @@ ferx_fit <- function(model, data,
                      gradient = c("auto", "ad", "fd"),
                      optimizer_trace = FALSE,
                      scale_params = TRUE,
+                     max_unconverged_frac = NULL,
+                     min_obs_for_convergence_check = NULL,
                      settings = NULL) {
   gradient <- match.arg(gradient)
   stopifnot(file.exists(model), file.exists(data))
@@ -245,6 +253,24 @@ ferx_fit <- function(model, data,
   # it preserves the behaviour callers expect when they don't pass the argument.
   if (isFALSE(scale_params)) {
     settings <- c(list(scale_params = FALSE), settings)
+  }
+  if (!is.null(max_unconverged_frac)) {
+    if (!is.numeric(max_unconverged_frac) || length(max_unconverged_frac) != 1L ||
+        !is.finite(max_unconverged_frac) || max_unconverged_frac < 0 || max_unconverged_frac > 1) {
+      stop("`max_unconverged_frac` must be a numeric scalar between 0 and 1")
+    }
+    settings <- c(list(max_unconverged_frac = max_unconverged_frac), settings)
+  }
+  if (!is.null(min_obs_for_convergence_check)) {
+    if (!is.numeric(min_obs_for_convergence_check) ||
+        length(min_obs_for_convergence_check) != 1L ||
+        !is.finite(min_obs_for_convergence_check) ||
+        min_obs_for_convergence_check != as.integer(min_obs_for_convergence_check) ||
+        min_obs_for_convergence_check < 0L) {
+      stop("`min_obs_for_convergence_check` must be a non-negative integer scalar")
+    }
+    settings <- c(list(min_obs_for_convergence_check = as.integer(min_obs_for_convergence_check)),
+                  settings)
   }
   settings_parts <- .ferx_settings_to_strings(settings)
 
