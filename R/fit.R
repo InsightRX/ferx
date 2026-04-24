@@ -183,6 +183,7 @@ ferx_fit <- function(model, data,
                      sir = FALSE,
                      gradient = c("auto", "ad", "fd"),
                      optimizer_trace = FALSE,
+                     scale_params = TRUE,
                      settings = NULL) {
   gradient <- match.arg(gradient)
   stopifnot(file.exists(model), file.exists(data))
@@ -230,12 +231,20 @@ ferx_fit <- function(model, data,
   if (!is.logical(optimizer_trace) || length(optimizer_trace) != 1L || is.na(optimizer_trace)) {
     stop("`optimizer_trace` must be TRUE or FALSE")
   }
+  if (!is.logical(scale_params) || length(scale_params) != 1L || is.na(scale_params)) {
+    stop("`scale_params` must be TRUE or FALSE")
+  }
   # Merge optimizer_trace into settings so apply_fit_option handles it on the
   # Rust side (it's already in framework_keys()).  User-supplied settings take
   # precedence if somehow duplicated, which Rust will reject as a duplicate key
   # — but we forbid that below via the RESERVED list.
   if (isTRUE(optimizer_trace)) {
     settings <- c(list(optimizer_trace = TRUE), settings)
+  }
+  # Only inject scale_params when FALSE — the Rust default is true, so omitting
+  # it preserves the behaviour callers expect when they don't pass the argument.
+  if (isFALSE(scale_params)) {
+    settings <- c(list(scale_params = FALSE), settings)
   }
   settings_parts <- .ferx_settings_to_strings(settings)
 
