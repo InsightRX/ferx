@@ -144,6 +144,13 @@
 #'   \item{wall_time_secs}{Total wall-clock time for the fit in seconds.}
 #'   \item{model_name}{Model name from the \code{.ferx} file.}
 #'   \item{ferx_version}{ferx-nlme library version string.}
+#'   \item{cov_matrix}{Full parameter covariance matrix as a named numeric
+#'     matrix (params × params). \code{NULL} when covariance step was not run
+#'     or failed. Use \code{\link{ferx_cor_matrix}} to inspect correlations.}
+#'   \item{eta_normality}{Data frame with Shapiro-Wilk normality test for each
+#'     ETA: columns \code{eta}, \code{W}, \code{p_val}, \code{flag}. A
+#'     \code{[!]} flag appears when \code{p < 0.05}. \code{NULL} when fewer
+#'     than 3 subjects or no ETA columns in \code{sdtab}.}
 #'
 #' @examples
 #' \dontrun{
@@ -361,6 +368,56 @@ ferx_fit <- function(model, data,
     result$covariance_status <- "not_requested"
   }
 
+  # Reshape cov_matrix into a named square matrix (param × param)
+  d <- result$cov_matrix_dim %||% 0L
+  if (!is.null(result$cov_matrix) && length(result$cov_matrix) > 0L && d > 0L) {
+    m <- matrix(result$cov_matrix, nrow = d, ncol = d, byrow = TRUE)
+    n_theta  <- length(result$theta_names)
+    n_eta    <- result$omega_dim %||% 0L
+    n_sigma  <- length(result$sigma)
+    n_omega_packed <- d - n_theta - n_sigma
+    # Determine parameterisation: diagonal (n_omega_packed == n_eta) or block
+    omega_names <- if (n_omega_packed == n_eta) {
+      paste0("OMEGA(", seq_len(n_eta), ",", seq_len(n_eta), ")")
+    } else {
+      # Block lower-triangle: L(i,j) for i >= j, column-major
+      nm <- character(n_omega_packed)
+      k  <- 0L
+      for (i in seq_len(n_eta)) {
+        for (j in seq_len(i)) {
+          k <- k + 1L
+          nm[k] <- sprintf("OMEGA_L(%d,%d)", i, j)
+        }
+      }
+      nm
+    }
+    pnames <- c(
+      result$theta_names,
+      if (n_omega_packed > 0L) omega_names else character(0L),
+      if (n_sigma > 0L) paste0("SIGMA(", seq_len(n_sigma), ")") else character(0L)
+    )
+    if (length(pnames) == d) rownames(m) <- colnames(m) <- pnames
+    result$cov_matrix <- m
+  } else {
+    result$cov_matrix <- NULL
+  }
+  result$cov_matrix_dim <- NULL
+
+  # ETA normality (Shapiro-Wilk) — computed in R from sdtab EBEs
+  result$eta_normality <- .ferx_compute_eta_normality(result$sdtab)
+  # Push normality warnings into the warnings vector
+  if (!is.null(result$eta_normality)) {
+    for (i in seq_len(nrow(result$eta_normality))) {
+      row <- result$eta_normality[i, ]
+      if (nzchar(row$flag) && !is.na(row$p_val)) {
+        result$warnings <- c(
+          result$warnings,
+          sprintf("%s Shapiro-Wilk p=%.4f — distribution may be non-normal", row$eta, row$p_val)
+        )
+      }
+    }
+  }
+
   # Clean up internal fields
   result$theta_names <- NULL
   result$omega_dim <- NULL
@@ -374,6 +431,28 @@ ferx_fit <- function(model, data,
 
   class(result) <- "ferx_fit"
   result
+}
+
+# Compute Shapiro-Wilk normality test for each ETA, one row per ID.
+# Returns a data.frame with columns: eta, W, p_val, flag.
+.ferx_compute_eta_normality <- function(sdtab) {
+  if (is.null(sdtab) || !is.data.frame(sdtab)) return(NULL)
+  eta_cols <- grep("^ETA", names(sdtab), value = TRUE)
+  if (length(eta_cols) == 0L) return(NULL)
+  id_col   <- if ("ID" %in% names(sdtab)) "ID" else names(sdtab)[1L]
+  one_per  <- sdtab[!duplicated(sdtab[[id_col]]), eta_cols, drop = FALSE]
+  do.call(rbind, lapply(eta_cols, function(col) {
+    vals <- one_per[[col]]
+    vals <- vals[is.finite(vals)]
+    if (length(vals) < 3L) {
+      return(data.frame(eta = col, W = NA_real_, p_val = NA_real_, flag = "",
+                        stringsAsFactors = FALSE))
+    }
+    sw  <- shapiro.test(vals)
+    flg <- if (sw$p.value < 0.05) "[!]" else ""
+    data.frame(eta = col, W = round(as.numeric(sw$statistic), 3),
+               p_val = round(sw$p.value, 4), flag = flg, stringsAsFactors = FALSE)
+  }))
 }
 
 #' @export
