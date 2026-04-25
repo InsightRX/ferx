@@ -98,7 +98,7 @@ fn ferx_rust_fit(
             }
         };
 
-    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None) {
+    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None, None) {
         Ok(p) => p,
         Err(e) => {
             rprintln!("Error reading data: {}", e);
@@ -294,7 +294,7 @@ fn ferx_rust_simulate(
         }
     };
 
-    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None) {
+    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None, None) {
         Ok(p) => p,
         Err(e) => {
             rprintln!("Error reading data: {}", e);
@@ -345,7 +345,7 @@ fn ferx_rust_simulate_from_fit(
         }
     };
 
-    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None) {
+    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None, None) {
         Ok(p) => p,
         Err(e) => {
             rprintln!("Error reading data: {}", e);
@@ -385,7 +385,7 @@ fn ferx_rust_predict(
         }
     };
 
-    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None) {
+    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None, None) {
         Ok(p) => p,
         Err(e) => {
             rprintln!("Error reading data: {}", e);
@@ -429,7 +429,7 @@ fn ferx_rust_predict_from_fit(
         }
     };
 
-    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None) {
+    let population = match ferx_nlme::read_nonmem_csv(Path::new(data_path), None, None) {
         Ok(p) => p,
         Err(e) => {
             rprintln!("Error reading data: {}", e);
@@ -540,6 +540,8 @@ fn params_from_fit(
             names: template.sigma.names.clone(),
         },
         sigma_fixed: template.sigma_fixed.clone(),
+        omega_iov: None,
+        kappa_fixed: Vec::new(),
     })
 }
 
@@ -608,6 +610,24 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
     let sir_ci_omega = flatten_ci(&result.sir_ci_omega);
     let sir_ci_sigma = flatten_ci(&result.sir_ci_sigma);
 
+    // IOV kappa omega (row-major flat); empty when no IOV
+    let (omega_iov_flat, omega_iov_dim): (Vec<f64>, i32) = match &result.omega_iov {
+        Some(m) => {
+            let n = m.nrows();
+            let mut v = Vec::with_capacity(n * n);
+            for i in 0..n {
+                for j in 0..n {
+                    v.push(m[(i, j)]);
+                }
+            }
+            (v, n as i32)
+        }
+        None => (Vec::new(), 0i32),
+    };
+    let kappa_names: Vec<String> = result.kappa_names.clone();
+    let se_kappa: Vec<f64> = result.se_kappa.clone().unwrap_or_default();
+    let shrinkage_kappa: Vec<f64> = result.shrinkage_kappa.clone();
+
     list!(
         converged = result.converged,
         method = method_label,
@@ -632,7 +652,12 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         sir_ess = sir_ess,
         sir_ci_theta = sir_ci_theta,
         sir_ci_omega = sir_ci_omega,
-        sir_ci_sigma = sir_ci_sigma
+        sir_ci_sigma = sir_ci_sigma,
+        omega_iov = omega_iov_flat,
+        omega_iov_dim = omega_iov_dim,
+        kappa_names = kappa_names,
+        se_kappa = se_kappa,
+        shrinkage_kappa = shrinkage_kappa
     )
 }
 

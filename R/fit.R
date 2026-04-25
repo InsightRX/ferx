@@ -278,9 +278,28 @@ ferx_fit <- function(model, data,
   sig_names <- paste0("SIGMA(", seq_along(result$sigma), ")")
   result$sir_ci_sigma <- reshape_ci(result$sir_ci_sigma, sig_names)
 
+  # Reshape omega_iov into a named matrix (NULL when no IOV)
+  d_iov <- result$omega_iov_dim %||% 0L
+  if (!is.null(result$omega_iov) && length(result$omega_iov) > 0L && d_iov > 0L) {
+    m_iov <- matrix(result$omega_iov, nrow = d_iov, ncol = d_iov)
+    if (length(result$kappa_names) == d_iov) {
+      rownames(m_iov) <- colnames(m_iov) <- result$kappa_names
+    }
+    result$omega_iov <- m_iov
+    if (length(result$kappa_names) > 0L) names(result$shrinkage_kappa) <- result$kappa_names
+    if (length(result$se_kappa) == 0L) result$se_kappa <- NULL
+    else names(result$se_kappa) <- result$kappa_names
+  } else {
+    result$omega_iov <- NULL
+    result$se_kappa <- NULL
+    result$shrinkage_kappa <- NULL
+    result$kappa_names <- NULL
+  }
+
   # Clean up internal fields
   result$theta_names <- NULL
   result$omega_dim <- NULL
+  result$omega_iov_dim <- NULL
 
   # Print mu-referencing detections as informational messages
   mu_ref_warnings <- grep("mu-ref", result$warnings, value = TRUE)
