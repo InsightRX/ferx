@@ -122,7 +122,7 @@
 #'     with columns \code{lower} and \code{upper} (NULL if SIR not run)}
 #'   \item{omega_iov}{IOV variance matrix for kappa parameters (NULL if no IOV)}
 #'   \item{kappa_names}{Names of kappa (IOV) parameters (NULL if no IOV)}
-#'   \item{se_kappa}{Standard errors for kappa diagonal (NULL if covariance step not run or no IOV)}
+#'   \item{se_kappa}{Standard errors for kappa parameters: length \code{d} (diagonal kappa) or \code{d*(d+1)/2} (block_kappa, lower-triangle order). NULL if covariance step not run or no IOV.}
 #'   \item{shrinkage_kappa}{Shrinkage values for kappa EBEs (NULL if no IOV)}
 #'   \item{ebe_kappas}{Data frame with columns ID, OCC, and one column per kappa parameter
 #'     containing per-subject per-occasion kappa EBEs (NULL if no IOV)}
@@ -293,8 +293,29 @@ ferx_fit <- function(model, data,
     }
     result$omega_iov <- m_iov
     if (length(result$kappa_names) > 0L) names(result$shrinkage_kappa) <- result$kappa_names
-    if (length(result$se_kappa) == 0L) result$se_kappa <- NULL
-    else names(result$se_kappa) <- result$kappa_names
+    if (length(result$se_kappa) == 0L) {
+      result$se_kappa <- NULL
+    } else {
+      n_tri <- d_iov * (d_iov + 1L) / 2L
+      if (length(result$se_kappa) == d_iov) {
+        names(result$se_kappa) <- result$kappa_names
+      } else if (length(result$se_kappa) == n_tri) {
+        # block kappa: label lower-triangle elements as NAME (diagonal) or COV_i_j
+        tri_names <- character(n_tri)
+        idx <- 1L
+        for (j in seq_len(d_iov)) {
+          for (i in j:d_iov) {
+            tri_names[idx] <- if (i == j) {
+              result$kappa_names[i]
+            } else {
+              paste0("COV_", result$kappa_names[j], "_", result$kappa_names[i])
+            }
+            idx <- idx + 1L
+          }
+        }
+        names(result$se_kappa) <- tri_names
+      }
+    }
   } else {
     result$omega_iov <- NULL
     result$se_kappa <- NULL
@@ -412,11 +433,19 @@ print.ferx_fit <- function(x, ...) {
     n_kap <- nrow(m_iov)
     kap_names <- x$kappa_names
     if (is.null(kap_names)) kap_names <- paste0("KAPPA", seq_len(n_kap))
+    n_se <- length(x$se_kappa)
+    n_tri <- n_kap * (n_kap + 1L) / 2L
+    is_block_se <- (n_se == n_tri && n_kap > 1L)
+    # For block kappa the SEs are packed as lower triangle (column-major).
+    # Diagonal element for column j (1-indexed) sits at flat index j*n_kap - j*(j-1)/2.
+    diag_se_idx <- function(j) j * n_kap - j * (j - 1L) / 2L - (n_kap - j)
+    iov_has_offdiag <- FALSE
     for (i in seq_len(n_kap)) {
       var_ii <- m_iov[i, i]
       cv_pct <- if (var_ii > 0) sqrt(var_ii) * 100 else 0
-      se_str <- if (!is.null(x$se_kappa) && length(x$se_kappa) >= i) {
-        sprintf("%.6f", x$se_kappa[i])
+      se_idx <- if (is_block_se) diag_se_idx(i) else i
+      se_str <- if (!is.null(x$se_kappa) && n_se >= se_idx) {
+        sprintf("%.6f", x$se_kappa[se_idx])
       } else {
         "N/A"
       }
@@ -429,6 +458,23 @@ print.ferx_fit <- function(x, ...) {
         "  %s = %.6f  (CV%% = %.1f)  SE = %s  Shrinkage = %s\n",
         kap_names[i], var_ii, cv_pct, se_str, shr_str
       ))
+      for (j in seq_len(i - 1L)) {
+        if (abs(m_iov[i, j]) > 1e-15) iov_has_offdiag <- TRUE
+      }
+    }
+    if (iov_has_offdiag) {
+      cat("  --- Correlations ---\n")
+      for (i in seq_len(n_kap)) {
+        for (j in seq_len(i - 1L)) {
+          cov_ij <- m_iov[i, j]
+          var_i <- m_iov[i, i]; var_j <- m_iov[j, j]
+          corr <- if (var_i > 0 && var_j > 0) cov_ij / (sqrt(var_i) * sqrt(var_j)) else 0
+          cat(sprintf(
+            "  %s ~ %s : cov = %.6f  (corr = %.4f)\n",
+            kap_names[i], kap_names[j], cov_ij, corr
+          ))
+        }
+      }
     }
   }
 
