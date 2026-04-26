@@ -628,6 +628,34 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
     let se_kappa: Vec<f64> = result.se_kappa.clone().unwrap_or_default();
     let shrinkage_kappa: Vec<f64> = result.shrinkage_kappa.clone();
 
+    // EBE kappas as a data frame: ID, OCC, KAPPA_1, ...
+    // Rows: one per (subject, occasion); empty when no IOV.
+    let ebe_kappas_df: Robj = if result.ebe_kappas.is_empty() || kappa_names.is_empty() {
+        ().into()
+    } else {
+        let n_kappa = kappa_names.len();
+        let mut ids: Vec<f64> = Vec::new();
+        let mut occs: Vec<f64> = Vec::new();
+        let mut kappa_cols: Vec<Vec<f64>> = vec![Vec::new(); n_kappa];
+        for (si, subj_kappas) in result.ebe_kappas.iter().enumerate() {
+            for (oi, kappa_vec) in subj_kappas.iter().enumerate() {
+                ids.push(si as f64 + 1.0);
+                occs.push(oi as f64 + 1.0);
+                for k in 0..n_kappa {
+                    kappa_cols[k].push(if k < kappa_vec.len() { kappa_vec[k] } else { f64::NAN });
+                }
+            }
+        }
+        let mut cols: Vec<(String, Vec<f64>)> = vec![
+            ("ID".to_string(), ids),
+            ("OCC".to_string(), occs),
+        ];
+        for (k, name) in kappa_names.iter().enumerate() {
+            cols.push((name.clone(), kappa_cols[k].clone()));
+        }
+        sdtab_to_dataframe(&cols)
+    };
+
     list!(
         converged = result.converged,
         method = method_label,
@@ -657,7 +685,8 @@ fn fit_result_to_list(result: &FitResult, population: &Population) -> List {
         omega_iov_dim = omega_iov_dim,
         kappa_names = kappa_names,
         se_kappa = se_kappa,
-        shrinkage_kappa = shrinkage_kappa
+        shrinkage_kappa = shrinkage_kappa,
+        ebe_kappas = ebe_kappas_df
     )
 }
 

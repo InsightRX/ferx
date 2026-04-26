@@ -115,11 +115,17 @@
 #'   \item{se_theta}{Standard errors for theta (NULL if covariance step failed)}
 #'   \item{se_omega}{Standard errors for omega diagonal}
 #'   \item{se_sigma}{Standard errors for sigma}
-#'   \item{sdtab}{Data frame with ID, TIME, DV, PRED, IPRED, CWRES, IWRES, ETA1..n}
+#'   \item{sdtab}{Data frame with ID, TIME, DV, PRED, IPRED, CWRES, IWRES, ETA1..n, OCC (if IOV)}
 #'   \item{warnings}{Character vector of warnings}
 #'   \item{sir_ess}{SIR effective sample size (NULL if SIR not run)}
 #'   \item{sir_ci_theta, sir_ci_omega, sir_ci_sigma}{SIR 95\% CI matrices
 #'     with columns \code{lower} and \code{upper} (NULL if SIR not run)}
+#'   \item{omega_iov}{IOV variance matrix for kappa parameters (NULL if no IOV)}
+#'   \item{kappa_names}{Names of kappa (IOV) parameters (NULL if no IOV)}
+#'   \item{se_kappa}{Standard errors for kappa diagonal (NULL if covariance step not run or no IOV)}
+#'   \item{shrinkage_kappa}{Shrinkage values for kappa EBEs (NULL if no IOV)}
+#'   \item{ebe_kappas}{Data frame with columns ID, OCC, and one column per kappa parameter
+#'     containing per-subject per-occasion kappa EBEs (NULL if no IOV)}
 #'
 #' @examples
 #' \dontrun{
@@ -294,6 +300,7 @@ ferx_fit <- function(model, data,
     result$se_kappa <- NULL
     result$shrinkage_kappa <- NULL
     result$kappa_names <- NULL
+    result$ebe_kappas <- NULL
   }
 
   # Clean up internal fields
@@ -394,6 +401,34 @@ print.ferx_fit <- function(x, ...) {
           i, j, cov_ij, corr
         ))
       }
+    }
+  }
+
+  # OMEGA_IOV (Inter-Occasion Variability)
+  if (!is.null(x$omega_iov)) {
+    cat("\n--- OMEGA_IOV Estimates (Inter-Occasion Variability) ---\n")
+    m_iov <- x$omega_iov
+    if (is.null(dim(m_iov))) m_iov <- matrix(m_iov, 1, 1)
+    n_kap <- nrow(m_iov)
+    kap_names <- x$kappa_names
+    if (is.null(kap_names)) kap_names <- paste0("KAPPA", seq_len(n_kap))
+    for (i in seq_len(n_kap)) {
+      var_ii <- m_iov[i, i]
+      cv_pct <- if (var_ii > 0) sqrt(var_ii) * 100 else 0
+      se_str <- if (!is.null(x$se_kappa) && length(x$se_kappa) >= i) {
+        sprintf("%.6f", x$se_kappa[i])
+      } else {
+        "N/A"
+      }
+      shr_str <- if (!is.null(x$shrinkage_kappa) && length(x$shrinkage_kappa) >= i) {
+        sprintf("%.1f%%", x$shrinkage_kappa[i] * 100)
+      } else {
+        "N/A"
+      }
+      cat(sprintf(
+        "  %s = %.6f  (CV%% = %.1f)  SE = %s  Shrinkage = %s\n",
+        kap_names[i], var_ii, cv_pct, se_str, shr_str
+      ))
     }
   }
 
